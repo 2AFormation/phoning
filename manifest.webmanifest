@@ -1,0 +1,15 @@
+{
+  "name": "2A Phoning",
+  "short_name": "2A Phoning",
+  "description": "Séances d'appels, rappels et suivi clients de 2A Formation",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f5f4",
+  "theme_color": "#0f6b5c",
+  "icons": [
+    {"src": "icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}

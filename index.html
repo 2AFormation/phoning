@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f6b5c">
+<meta name="robots" content="noindex,nofollow">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icone-192.png">
+<link rel="apple-touch-icon" href="icone-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="2A Phoning">
+<title>2A Phoning</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout : bandeau d'onglets collant ; une colonne sur téléphone, fiche d'appel centrée ; tableau de bord en grille sur ordinateur */
+:root{
+  --bg:#f3f5f4; --panel:#ffffff; --ink:#15302b; --muted:#5b6f6a; --line:#d6dfdc;
+  --accent:#0f6b5c; --accent-ink:#ffffff; --signal:#e08a1e; --signal-ink:#1d1300;
+  --ok:#1f8a4c; --warn:#c77a12; --bad:#c2414b; --soft:#e6efec; --land:#e3e9e7; --land-0:#e3e9e7;
+  --f-display:"Bricolage Grotesque","Trebuchet MS",sans-serif;
+  --f-body:"Atkinson Hyperlegible","Segoe UI",system-ui,sans-serif;
+  --f-data:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1716; --panel:#17211f; --ink:#e4ece9; --muted:#97aaa5; --line:#2a3835;
+  --accent:#3fbfa6; --accent-ink:#06221d; --signal:#f2a445; --signal-ink:#1d1300;
+  --ok:#4cc483; --warn:#f0a845; --bad:#ef6b74; --soft:#1e2c29; --land:#24312e; --land-0:#24312e; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1716; --panel:#17211f; --ink:#e4ece9; --muted:#97aaa5; --line:#2a3835;
+  --accent:#3fbfa6; --accent-ink:#06221d; --signal:#f2a445; --signal-ink:#1d1300;
+  --ok:#4cc483; --warn:#f0a845; --bad:#ef6b74; --soft:#1e2c29; --land:#24312e; --land-0:#24312e; color-scheme:dark}
+*{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.45;margin:0}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
+.wrap{max-width:1100px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 60px;display:flex;flex-direction:column;gap:18px}
+nav.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--panel);border-bottom:1px solid var(--line)}
+nav.tabs .in{max-width:1100px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;gap:4px;align-items:center;overflow-x:auto}
+.brand{font-family:var(--f-display);font-weight:800;font-size:18px;margin-right:auto;padding-block:12px;white-space:nowrap}
+.brand b{color:var(--accent)}
+nav a{font-weight:700;color:var(--muted);text-decoration:none;padding:14px 10px;border-bottom:3px solid transparent;white-space:nowrap}
+nav a[aria-current="page"]{color:var(--ink);border-color:var(--accent)}
+nav a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1,h2,h3{font-family:var(--f-display);margin:0;line-height:1.1;text-wrap:balance}
+h1{font-size:clamp(26px,5vw,38px);font-weight:800}
+h2{font-size:22px;font-weight:800}
+h3{font-size:17px;font-weight:600}
+.muted{color:var(--muted)}
+.small{font-size:14px}
+.eyebrow{font-family:var(--f-data);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;min-width:0}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button,.btn{font:inherit;font-weight:700;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:10px 14px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px;justify-content:center}
+button:hover,.btn:hover{border-color:var(--accent)}
+.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.call{background:var(--signal);color:var(--signal-ink);border-color:var(--signal);font-size:19px;padding:14px 22px}
+button[disabled]{opacity:.5;cursor:not-allowed}
+select,input,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;max-width:100%}
+textarea{width:100%;min-height:64px;resize:vertical}
+label.f{display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:14px;min-width:0;flex:1 1 180px}
+.num{font-variant-numeric:tabular-nums}
+/* jauge */
+.gauge{height:14px;border-radius:999px;background:var(--soft);overflow:hidden}
+.gauge i{display:block;height:100%;background:var(--accent);border-radius:999px;transition:width .4s}
+.big{font-family:var(--f-display);font-weight:800;font-size:40px;line-height:1}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px}
+.stat .big{font-size:32px}
+/* fiche d'appel */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:14px;max-width:720px;width:100%;margin:0 auto}
+.card .kind{display:inline-flex;align-self:flex-start;font-family:var(--f-data);font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:4px 8px;border-radius:6px;background:var(--soft);color:var(--accent)}
+.tel{font-family:var(--f-data);font-size:clamp(24px,6vw,34px);letter-spacing:.02em;user-select:all}
+.script{background:var(--soft);border-radius:10px;padding:12px 14px;font-size:15px}
+.script p{margin:0 0 6px}
+.res{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.res button{min-height:52px;text-align:center}
+.res button.sel{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.res .g{border-left:5px solid var(--ok)}.res .w{border-left:5px solid var(--warn)}.res .b{border-left:5px solid var(--bad)}.res .n{border-left:5px solid var(--muted)}
+.chip{display:inline-flex;align-items:center;font-size:13px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--soft);color:var(--ink)}
+.chip.late{background:var(--bad);color:#fff}.chip.soon{background:var(--warn);color:#1d1300}.chip.ok{background:var(--ok);color:#fff}
+.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.list li{display:flex;gap:10px;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.list li>div{min-width:0;flex:1 1 220px}
+.badges{display:flex;flex-wrap:wrap;gap:10px}
+.badge{border:1px dashed var(--line);border-radius:12px;padding:10px 12px;min-width:130px;flex:1 1 130px;color:var(--muted)}
+.badge.on{border:1px solid var(--accent);color:var(--ink);background:var(--soft)}
+.badge b{display:block;font-family:var(--f-display);font-size:18px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:700;z-index:20;max-width:90vw}
+.note{border-left:4px solid var(--warn);padding:8px 12px;background:var(--soft);border-radius:6px}
+/* carte */
+#map{display:block;width:100%;height:auto;max-width:640px;margin:0 auto}
+.dep{stroke:var(--panel);stroke-width:.9;cursor:pointer}
+.dep.excl{fill:url(#hatch)!important;cursor:default}
+.dep.sel{stroke:var(--ink);stroke-width:2}
+.inset-frame{fill:none;stroke:var(--line)}
+.inset-lbl{font-family:var(--f-data);font-size:11px;fill:var(--muted)}
+.legend{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted);flex-wrap:wrap}
+.legend i{width:22px;height:12px;display:inline-block;border-radius:2px}
+/* clients */
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--f-data);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.tw{overflow-x:auto}
+@media (max-width:640px){.card{padding:16px}.call{width:100%}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap" id="loginZone" hidden>
+  <div class="card" style="max-width:420px;margin-top:8vh">
+    <div class="brand">2A <b>Phoning</b></div>
+    <h1 style="font-size:26px">Connexion</h1>
+    <form id="loginForm" class="row" style="flex-direction:column;align-items:stretch">
+      <label class="f">Adresse mail<input id="lEmail" type="email" autocomplete="username" required></label>
+      <label class="f">Mot de passe<input id="lPass" type="password" autocomplete="current-password" required></label>
+      <button class="primary" type="submit">Se connecter</button>
+      <button type="button" id="forgot">Mot de passe oublié</button>
+    </form>
+    <form id="newPassForm" class="row" style="flex-direction:column;align-items:stretch" hidden>
+      <p>Choisissez votre mot de passe (8 caractères au moins).</p>
+      <label class="f">Nouveau mot de passe<input id="nPass" type="password" autocomplete="new-password" minlength="8" required></label>
+      <button class="primary" type="submit">Enregistrer le mot de passe</button>
+    </form>
+    <p class="muted small" id="loginMsg"></p>
+  </div>
+</div>
+<div id="appZone" hidden>
+<nav class="tabs" aria-label="Sections"><div class="in">
+  <span class="brand">2A <b>Phoning</b></span>
+  <a href="#accueil" data-v="accueil">Accueil</a>
+  <a href="#seance" data-v="seance">Séance d'appels</a>
+  <a href="#carte" data-v="carte">Carte</a>
+  <a href="#clients" data-v="clients">Clients et devis</a>
+  <button id="logout" class="small" style="margin-left:8px">Se déconnecter</button>
+</div></nav>
+
+<div class="wrap">
+  <div id="status" class="note" hidden></div>
+
+  <section id="v-accueil" data-view="accueil">
+    <div class="row" style="justify-content:space-between;align-items:flex-end">
+      <div><div class="eyebrow" id="today"></div><h1 id="hello">Bonjour</h1></div>
+      <a class="btn call" href="#seance">Commencer une séance</a>
+    </div>
+    <div class="grid" style="margin-top:16px">
+      <div class="panel">
+        <h2>Cette séance</h2>
+        <p class="muted small" id="goalTxt"></p>
+        <div class="gauge" aria-hidden="true"><i id="gaugeBar" style="width:0%"></i></div>
+        <div class="row" style="margin-top:10px">
+          <label class="f" style="flex:0 1 auto">Objectif de séance
+            <select id="goalSel"><option>10</option><option selected>15</option><option>20</option><option>30</option><option>50</option></select></label>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>La semaine</h2>
+        <div class="stats" style="margin-top:12px" id="weekStats"></div>
+        <ul class="list small" id="byPerson" style="margin-top:10px"></ul>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <div class="row" style="justify-content:space-between"><h2>À rappeler</h2><span class="muted small" id="rapCount"></span></div>
+      <ul class="list" id="rappels"></ul>
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <h2>Paliers</h2>
+      <div class="badges" style="margin-top:12px" id="badges"></div>
+    </div>
+  </section>
+
+  <section id="v-seance" data-view="seance" hidden>
+    <div class="panel" id="setup">
+      <h2>Préparer la séance</h2>
+      <div class="row" style="margin-top:12px;align-items:flex-end">
+        <label class="f">Région<select id="selReg"></select></label>
+        <label class="f">Département<select id="selDep"><option value="">Tous</option></select></label>
+        <label class="f">Liste<select id="selList">
+          <option value="R">Relances après mail</option>
+          <option value="S">Établissements sans mail</option>
+          <option value="RS">Les deux</option></select></label>
+        <button class="primary" id="go">Lancer</button>
+      </div>
+      <p class="muted small" id="poolInfo" style="margin:10px 0 0"></p>
+    </div>
+    <div id="cardZone" style="margin-top:16px"></div>
+  </section>
+
+  <section id="v-carte" data-view="carte" hidden>
+    <div class="grid">
+      <div class="panel">
+        <h2>Où on en est</h2>
+        <p class="muted small">Part des établissements déjà appelés, par département. Touchez un département pour le détail.</p>
+        <svg id="map" viewBox="0 0 990 930" role="img" aria-label="Carte des départements colorés selon la part d'établissements appelés">
+          <defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--land)"></rect><line x1="0" y1="0" x2="0" y2="6" stroke="var(--line)" stroke-width="2.4"></line></pattern></defs>
+          <g id="insets"></g><g id="deps"></g>
+        </svg>
+        <div class="legend"><span>0 %</span><i style="background:var(--land-0)"></i><i id="l1"></i><i id="l2"></i><i id="l3"></i><i id="l4"></i><span>100 %</span><span style="margin-left:12px"><i style="background:url(#hatch);border:1px solid var(--line)"></i> Aude et Haute-Garonne : hors prospection</span></div>
+      </div>
+      <div class="panel" id="depPanel"></div>
+    </div>
+  </section>
+
+  <section id="v-clients" data-view="clients" hidden>
+    <div class="row" style="justify-content:space-between;align-items:flex-end">
+      <div><div class="eyebrow">Repris de l'onglet « Pour Antoine »</div><h1>Clients et devis</h1></div>
+      <span class="muted small" id="cliDate"></span>
+    </div>
+    <div class="panel" id="resume" style="margin-top:16px"></div>
+    <div id="cliSecs" style="display:flex;flex-direction:column;gap:16px;margin-top:16px"></div>
+  </section>
+</div>
+</div>
+<div class="toast" id="toast" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
