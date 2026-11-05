@@ -1,6 +1,4 @@
-// Paramètres publics du projet Supabase (Project URL et clé « anon public »).
-// Ils ne donnent accès à aucune donnée sans connexion d'un membre autorisé.
 window.APP_CONFIG = {
-  supabaseUrl: "A_REMPLACER",
-  supabaseAnonKey: "A_REMPLACER"
+supabaseUrl: "https://atrjjtdhjhibobceasbp.supabase.co",
+supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0cmpqdGRoamhpYm9iY2Vhc2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM4NDI1ODAsImV4cCI6MjEwOTQxODU4MH0.nXEKkJFkPkf5KnWA4B4qDvyBOT2u_rCUNOTM8xZQlgg"
 };
