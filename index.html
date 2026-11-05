@@ -63,6 +63,7 @@ button[disabled]{opacity:.5;cursor:not-allowed}
 select,input,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;max-width:100%}
 textarea{width:100%;min-height:64px;resize:vertical}
 label.f{display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:14px;min-width:0;flex:1 1 180px}
+#loginZone label.f{flex:none}
 .num{font-variant-numeric:tabular-nums}
 /* jauge */
 .gauge{height:14px;border-radius:999px;background:var(--soft);overflow:hidden}
@@ -216,7 +217,7 @@ th{font-family:var(--f-data);font-size:11px;text-transform:uppercase;letter-spac
 </div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js"></script>
+<script src="config.js?v=2"></script>
 <script src="app.js"></script>
 </body>
 </html>
