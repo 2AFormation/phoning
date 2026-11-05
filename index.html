@@ -106,7 +106,7 @@ table{border-collapse:collapse;width:100%;font-size:14px}
 th,td{text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 th{font-family:var(--f-data);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .tw{overflow-x:auto}
-@media (max-width:640px){.card{padding:16px}.call{width:100%}}
+@media (max-width:640px){.card{padding:16px}.call{width:100%}nav.tabs .in{flex-wrap:wrap;overflow:visible;gap:0;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}nav.tabs .brand{order:0;flex:1 1 calc(100% - 140px);padding-block:10px}nav.tabs #logout{order:1;margin-left:0!important}nav.tabs a{order:2;flex:1 1 22%;min-width:0;text-align:center;padding:10px 2px;font-size:14px}nav .long{display:none}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -133,9 +133,9 @@ th{font-family:var(--f-data);font-size:11px;text-transform:uppercase;letter-spac
 <nav class="tabs" aria-label="Sections"><div class="in">
   <span class="brand">2A <b>Phoning</b></span>
   <a href="#accueil" data-v="accueil">Accueil</a>
-  <a href="#seance" data-v="seance">Séance d'appels</a>
+  <a href="#seance" data-v="seance">Séance<span class="long"> d'appels</span></a>
   <a href="#carte" data-v="carte">Carte</a>
-  <a href="#clients" data-v="clients">Clients et devis</a>
+  <a href="#clients" data-v="clients">Clients<span class="long"> et devis</span></a>
   <button id="logout" class="small" style="margin-left:8px">Se déconnecter</button>
 </div></nav>
 
