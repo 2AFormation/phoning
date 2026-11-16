@@ -78,25 +78,30 @@ async function boot() {
     etab.forEach(e => C[e.id] = { id: e.id, k: e.genre, reg: e.region || 'Non précisé', dep: e.dep || '', nom: e.nom, qui: e.interlocuteur || '', tel: e.tel || '', mail: e.email || '', env: e.date_mail || '', ech: !!e.mail_en_echec, type: e.type || '', gest: e.gestionnaire || '', ville: e.ville || '', asso: e.asso_contactee || '' });
     ALL = Object.values(C); A = {}; app.forEach(r => A[r.etab_id] = fromRow(r));
     CLI = cli; inf.forEach(i => INFOS[i.cle] = i.valeur);
+    await loadCampagne();
     status(''); initViews(); route();
     sb.channel('appels').on('postgres_changes', { event: '*', schema: 'public', table: 'appels' }, p => {
       if (p.eventType === 'DELETE') delete A[p.old.etab_id]; else A[p.new.etab_id] = fromRow(p.new);
+      refreshCurrent();
+    }).subscribe();
+    if (CAMP_OK) sb.channel('campagne_appels').on('postgres_changes', { event: '*', schema: 'public', table: 'campagne_appels' }, p => {
+      if (p.eventType === 'DELETE') delete KA[p.old.cible_id]; else KA[p.new.cible_id] = kFromRow(p.new);
       refreshCurrent();
     }).subscribe();
   } catch (e) { status('Les données ne peuvent pas être chargées pour le moment. Vérifiez la connexion internet puis rechargez la page.'); }
 }
 
 // ---------- vues
-const VIEWS = ['accueil', 'seance', 'carte', 'clients'];
+const VIEWS = ['accueil', 'seance', 'campagne', 'carte', 'clients'];
 function route() {
   if (!ALL.length) return;
   const v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'accueil';
   document.querySelectorAll('[data-view]').forEach(s => s.hidden = s.dataset.view !== v);
   document.querySelectorAll('nav a').forEach(a => { if (a.dataset.v === v) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
-  if (v === 'carte') drawMap(); if (v === 'accueil') renderHome(); window.scrollTo(0, 0);
+  if (v === 'carte') drawMap(); if (v === 'accueil') renderHome(); if (v === 'campagne') renderCampagne(); window.scrollTo(0, 0);
 }
 addEventListener('hashchange', () => { if (!recovering) route(); });
-function refreshCurrent() { const v = location.hash.slice(1) || 'accueil'; if (v === 'accueil') renderHome(); if (v === 'carte') drawMap(); if (v === 'seance' && !Q.length) poolInfo(); }
+function refreshCurrent() { const v = location.hash.slice(1) || 'accueil'; if (v === 'accueil') renderHome(); if (v === 'carte') drawMap(); if (v === 'seance' && !Q.length) poolInfo(); if (v === 'campagne' && !kOpen) renderCampagne(); }
 
 // ---------- accueil
 const sess = { n: 0 };
@@ -235,6 +240,96 @@ function renderClients() { $('cliDate').textContent = INFOS.clients_maj ? 'Mis �
   $('cliSecs').innerHTML = secs.map(s => '<div class="panel"><h2>' + esc(s.t) + '</h2><div class="tw" style="margin-top:10px"><table><thead><tr><th>Structure</th><th>Où on en est</th><th>Prochaine action</th><th>Qui</th><th>Quand</th><th>Contact</th></tr></thead><tbody>' +
     s.rows.map(r => { const q = /^\d{4}-/.test(r.quand) ? r.quand.slice(0, 10) : ''; const cl = q ? (q <= addDays(0) ? 'late' : q <= addDays(7) ? 'soon' : '') : ''; return '<tr><td><b>' + esc(r.structure) + '</b></td><td>' + esc(r.ou_on_en_est) + '</td><td>' + esc(r.prochaine_action) + '</td><td>' + esc(r.qui) + '</td><td>' + (q ? '<span class="chip ' + cl + '">' + fr(q) + '</span>' : esc(r.quand)) + '</td><td>' + esc(r.contact) + '</td></tr>'; }).join('') + '</tbody></table></div></div>').join(''); }
 
+// ---------- campagne (mail 2Avenir) : d'abord les adresses en échec, puis les structures sans réponse au mail
+let CAMP_OK = false, KL = [], KC = {}, KA = {}, kOpen = null, kQueue = [], kUndo = null;
+const KRES = [['Adresse mail obtenue', 'g'], ['Mail bien reçu', 'g'], ['Joint – intéressé (RDV)', 'g'], ['Joint – à rappeler', 'w'], ['Message laissé', 'n'], ['Transmis au standard', 'n'], ['Pas intéressé', 'b'], ['Mauvais numéro', 'b'], ['Injoignable', 'n']];
+const KWAIT = 7; // jours après l'envoi du mail avant d'appeler une structure qui n'a pas répondu
+function kFromRow(r) { return { res: r.resultat, date: r.date_appel, pers: r.personne || '', note: r.note || '', rappel: r.rappel || '', mail: r.mail_obtenu || '', tel: r.tel_trouve || '', par: r.par || '', hist: r.hist || [] }; }
+function kToRow(id, a) { return { cible_id: id, resultat: a.res, date_appel: a.date, personne: a.pers, note: a.note, rappel: a.rappel || null, mail_obtenu: a.mail || '', tel_trouve: a.tel || '', par: a.par, hist: a.hist || [], maj: new Date().toISOString() }; }
+async function loadCampagne() {
+  try { const [c, a] = await Promise.all([fetchAll('campagne_cibles', 'id'), fetchAll('campagne_appels', 'cible_id')]);
+    KL = c.map(r => ({ id: r.id, etab: r.etab_id || '', reg: r.region || 'Non précisé', dep: r.dep || '', sect: r.secteur || '', nom: r.nom, mail: r.email || '', tel: r.tel || '', st: r.statut, env: r.date_envoi || '' }));
+    KL.forEach(c => KC[c.id] = c); KA = {}; a.forEach(r => KA[r.cible_id] = kFromRow(r)); CAMP_OK = true;
+  } catch (e) { CAMP_OK = false; } // tables pas encore créées : le reste de l'appli fonctionne normalement
+}
+const kTel = c => (KA[c.id] && KA[c.id].tel) || c.tel;
+const kSansRep = c => c.st === 'envoye' && c.env && c.env <= addDays(-KWAIT);
+const kCible = c => c.st === 'echec' || kSansRep(c);
+function kDone(c) { const a = KA[c.id]; if (!a) return false; if (a.rappel) return a.rappel > today; if (RETRY.includes(a.res)) return a.date > addDays(-7); return true; }
+function kKind(c) { return c.st === 'echec' ? 'Adresse en échec' : c.st === 'envoye' ? (kSansRep(c) ? 'Sans réponse au mail' : 'Mail envoyé le ' + fr(c.env)) : c.st === 'repondu' ? 'A répondu' : 'Mail pas encore envoyé'; }
+function kPool() { const l = $('kList').value, r = $('kReg').value, s = $('kSearch').value.trim().toLowerCase();
+  const p = KL.filter(c => (!r || c.reg === r) && (!s || (c.nom + ' ' + c.dep + ' ' + c.mail).toLowerCase().includes(s)) && (
+    l === 'todo' ? kCible(c) && !kDone(c) : l === 'echec' ? c.st === 'echec' : l === 'sansrep' ? kSansRep(c) : l === 'rappel' ? KA[c.id] && KA[c.id].rappel : l === 'faits' ? !!KA[c.id] : true));
+  p.sort((a, b) => (a.st === 'echec' ? 0 : 1) - (b.st === 'echec' ? 0 : 1) || (kTel(a) ? 0 : 1) - (kTel(b) ? 0 : 1) || a.reg.localeCompare(b.reg, 'fr') || a.dep.localeCompare(b.dep) || a.nom.localeCompare(b.nom, 'fr'));
+  return p; }
+function renderCampagne() {
+  if (!CAMP_OK) { $('kMissing').hidden = false; $('kMain').hidden = true; return; }
+  $('kMissing').hidden = true; $('kMain').hidden = !!kOpen; $('kCard').hidden = !kOpen; if (kOpen) return;
+  if (INFOS.campagne_titre) $('kTitle').textContent = INFOS.campagne_titre;
+  const ech = KL.filter(c => c.st === 'echec'), sr = KL.filter(kSansRep), vals = Object.values(KA);
+  $('kStats').innerHTML = [['Adresses en échec à appeler', ech.filter(c => !kDone(c)).length], ['Sans réponse à appeler', sr.filter(c => !kDone(c)).length], ['Appels notés', vals.length], ['Adresses recueillies', vals.filter(a => a.mail).length]].map(([l, v]) => '<div class="stat"><div class="big num">' + v + '</div><div class="muted small">' + l + '</div></div>').join('');
+  const env = KL.filter(c => c.st === 'envoye' && !kSansRep(c)).length;
+  $('kInfo').textContent = env ? env + ' structure' + (env > 1 ? 's' : '') + ' ont reçu le mail il y a moins de ' + KWAIT + ' jours : elles apparaîtront ici si elles ne répondent pas.' : '';
+  const p = kPool(), max = 150;
+  $('kCount').textContent = p.length + ' structure' + (p.length > 1 ? 's' : '');
+  $('kRows').innerHTML = p.slice(0, max).map(c => { const a = KA[c.id]; const t = kTel(c);
+    return '<li><div><b>' + esc(c.nom) + '</b><div class="muted">' + esc((NAMES[c.dep] ? c.dep + ' – ' + NAMES[c.dep] : c.dep) + (c.sect ? ' · ' + c.sect : '')) + '</div><div class="small"><span class="chip' + (c.st === 'echec' ? ' late' : '') + '">' + esc(kKind(c)) + '</span>' + (a ? ' <span class="muted">' + fr(a.date) + ' : ' + esc(a.res) + (a.rappel ? ' · rappel le ' + fr(a.rappel) : '') + '</span>' : '') + '</div></div>' +
+      (t ? '' : '<span class="chip">Pas de numéro</span>') + '<button data-kopen="' + c.id + '">Fiche</button></li>'; }).join('') || '<li class="muted">Aucune structure dans cette sélection.</li>';
+  $('kMore').textContent = p.length > max ? 'Et ' + (p.length - max) + ' autres : affinez avec la région ou la recherche.' : '';
+  $('kUndo').hidden = !kUndo; }
+function kScript(c) { const nm = me.prenom ? me.prenom + (me.prenom === 'Antoine' ? ' Gadiou' : me.prenom === 'Alexandre' ? ' Bigot' : me.prenom === 'Sybille' ? ' Deterpigny' : '') : 'Antoine Gadiou';
+  const deb = '« Bonjour, ' + esc(nm) + ', de 2A Formation, organisme de formation du travail social certifié Qualiopi. ';
+  const fin = '<p class="muted small">Aucun prix, aucun chiffre de temps gagné, aucune situation réelle. Si on vous donne une adresse, notez-la bien épelée.</p>';
+  if (c.st === 'echec') return '<p>' + deb + 'Nous avons voulu adresser à la direction un mail de présentation de 2Avenir, le logiciel de 2A Formation, mais il n’a pas pu être remis à l’adresse que nous avions. À quelle adresse puis-je l’envoyer ? »</p>' + fin;
+  return '<p>' + deb + (c.env ? 'Je vous ai envoyé le ' + fr(c.env) + ' ' : 'Je vous ai envoyé ') + 'un mail pour vous présenter 2Avenir, le logiciel de 2A Formation. Je voulais m’assurer qu’il vous était bien parvenu. Pourriez-vous me passer la personne de la direction qui pourrait être concernée ? »</p>' + fin; }
+function kOpenCard(id, queue) { kOpen = id; if (queue) kQueue = queue; location.hash = 'campagne'; renderCampagne(); kCardRender(); window.scrollTo(0, 0); }
+function kCardRender() { const c = KC[kOpen]; if (!c) { kOpen = null; renderCampagne(); return; }
+  const a = KA[c.id] || {}, t = kTel(c), main = c.etab && A[c.etab]; const pos = kQueue.indexOf(c.id);
+  $('kCard').innerHTML = '<div class="card">' +
+    '<div class="row" style="justify-content:space-between"><span class="kind">' + esc(kKind(c)) + '</span><span class="muted small num">' + (pos >= 0 ? 'Structure ' + (pos + 1) + ' sur ' + kQueue.length : '') + '</span></div>' +
+    '<div><h2>' + esc(c.nom) + '</h2><div class="muted">' + esc((NAMES[c.dep] || c.dep) + (c.sect ? ' · ' + c.sect : '')) + '</div></div>' +
+    (c.mail ? '<div><span class="eyebrow">' + (c.st === 'echec' ? 'Adresse en échec' : 'Adresse du mail') + '</span><div>' + esc(c.mail) + '</div></div>' : '') +
+    (a.res ? '<div class="note small"><b>Appels de la campagne</b><br>' + fr(a.date) + ' : <b>' + esc(a.res) + '</b> (' + esc(nom(a.par)) + ')' + (a.pers ? ' · ' + esc(a.pers) : '') + (a.mail ? ' · adresse : ' + esc(a.mail) : '') + (a.note ? ' – ' + esc(a.note) : '') + (a.hist || []).map(h => '<br>' + fr(h.date) + ' : ' + esc(h.res) + (h.note ? ' – ' + esc(h.note) : '')).join('') + '</div>' : '') +
+    (main ? '<div class="note small"><b>Déjà appelée pour la prospection</b><br>' + fr(main.date) + ' : ' + esc(main.res) + (main.note ? ' – ' + esc(main.note) : '') + '</div>' : '') +
+    (t ? '<div class="row"><span class="tel num" id="kTelTxt">' + esc(t) + '</span></div><div class="row"><a class="btn call" href="tel:' + esc(t.replace(/\s/g, '')) + '">Appeler</a><button id="kCp">Copier le numéro</button></div>'
+       : '<div class="note small">Pas de numéro connu : cherchez-le sur le site de la structure, puis notez-le ci-dessous.</div>') +
+    '<details class="script" open><summary><b>Ce que je dis</b></summary>' + kScript(c) + '</details>' +
+    '<div><div class="eyebrow" style="margin-bottom:8px">Résultat de l’appel</div><div class="res" id="kRes">' + KRES.map(([r, s]) => '<button class="' + s + '" data-r="' + esc(r) + '">' + esc(r) + '</button>').join('') + '</div></div>' +
+    '<div class="row">' +
+      '<label class="f">Personne jointe<input id="kPers" autocomplete="off" placeholder="Nom, fonction"></label>' +
+      '<label class="f">Nouvelle adresse mail recueillie<input id="kMail" type="email" autocomplete="off" placeholder="prenom.nom@structure.fr"></label>' +
+      (t ? '' : '<label class="f">Numéro trouvé<input id="kTelIn" type="tel" autocomplete="off"></label>') +
+      '<label class="f">À rappeler le<input type="date" id="kDate"></label>' +
+      '<label class="f" style="flex-basis:100%">Mes notes pendant l’appel<textarea id="kNote" rows="4" placeholder="Qui j’ai eu, ce qui a été dit, la suite à donner…"></textarea></label>' +
+    '</div>' +
+    '<div class="row" style="justify-content:flex-end"><button id="kClose">Revenir à la liste</button>' + (pos >= 0 && pos < kQueue.length - 1 ? '<button id="kSkip">Passer</button>' : '') + '<button class="primary" id="kOk" disabled>Enregistrer</button></div></div>';
+  let pick = null;
+  try { const dn = (ls.kdrafts || {})[c.id]; if (dn) $('kNote').value = dn; } catch (e) {}
+  $('kNote').addEventListener('input', () => { ls.kdrafts = ls.kdrafts || {}; ls.kdrafts[c.id] = $('kNote').value; save(); });
+  const cp = $('kCp'); if (cp) cp.onclick = async () => { try { await navigator.clipboard.writeText(t); toast('Numéro copié'); } catch (e) { toast('Copie impossible : sélectionnez le numéro'); } };
+  $('kRes').onclick = e => { const b = e.target.closest('button'); if (!b) return; pick = b.dataset.r;
+    $('kRes').querySelectorAll('button').forEach(x => x.classList.toggle('sel', x === b));
+    if (NEEDDATE.includes(pick) && !$('kDate').value) $('kDate').value = addDays(pick === 'Joint – à rappeler' ? 7 : 3);
+    $('kOk').disabled = false; };
+  $('kClose').onclick = () => { kOpen = null; renderCampagne(); };
+  const sk = $('kSkip'); if (sk) sk.onclick = () => kOpenCard(kQueue[pos + 1]);
+  $('kOk').onclick = () => kRecord(c, pick); }
+async function kRecord(c, res) { if (!res) return; const prev = KA[c.id] ? JSON.parse(JSON.stringify(KA[c.id])) : null;
+  const mail = $('kMail').value.trim(); if (mail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) { toast('L’adresse mail semble incomplète : vérifiez-la.'); return; }
+  const hist = (prev && prev.res ? [{ res: prev.res, date: prev.date || '', par: prev.par || '', note: prev.note || '', pers: prev.pers || '' }].concat(prev.hist || []) : []).slice(0, 10);
+  const body = { res, date: today, par: me.email, pers: $('kPers').value.trim(), note: $('kNote').value.trim(), rappel: $('kDate').value || '', mail: mail || (prev && prev.mail) || '', tel: ($('kTelIn') ? $('kTelIn').value.trim() : '') || (prev && prev.tel) || '', hist };
+  $('kOk').disabled = true;
+  const { error } = await sb.from('campagne_appels').upsert(kToRow(c.id, body));
+  if (error) { toast('Enregistrement impossible pour le moment : réessayez dans un instant.'); $('kOk').disabled = false; return; }
+  KA[c.id] = body; kUndo = { id: c.id, prev }; toast('Appel enregistré'); sess.n++;
+  if (ls.kdrafts && ls.kdrafts[c.id]) { delete ls.kdrafts[c.id]; save(); }
+  const pos = kQueue.indexOf(c.id);
+  if (pos >= 0 && pos < kQueue.length - 1) kOpenCard(kQueue[pos + 1]); else { kOpen = null; renderCampagne(); } }
+async function kDoUndo() { if (!kUndo) return; const u = kUndo; kUndo = null;
+  const { error } = u.prev ? await sb.from('campagne_appels').upsert(kToRow(u.id, u.prev)) : await sb.from('campagne_appels').delete().eq('cible_id', u.id);
+  if (error) { toast('Annulation impossible pour le moment.'); return; }
+  if (u.prev) KA[u.id] = u.prev; else delete KA[u.id]; sess.n = Math.max(0, sess.n - 1); toast('Dernier appel annulé'); renderCampagne(); }
+
 // ---------- branchements
 let viewsReady = false;
 function initViews() { if (viewsReady) return; viewsReady = true;
@@ -246,5 +341,14 @@ function initViews() { if (viewsReady) return; viewsReady = true;
   $('go').addEventListener('click', () => { single = null; Q = pool().map(c => c.id); qi = 0; renderCard(); });
   $('goalSel').addEventListener('change', e => { ls.goal = +e.target.value; save(); renderHome(); });
   document.addEventListener('click', e => { const b = e.target.closest('[data-open]'); if (b) openSingle(b.dataset.open); });
+  if (CAMP_OK) {
+    const KR = [...new Set(KL.map(c => c.reg))].sort((a, b) => a.localeCompare(b, 'fr'));
+    $('kReg').innerHTML = '<option value="">Toutes</option>' + KR.map(r => '<option>' + esc(r) + '</option>').join('');
+    ['kList', 'kReg'].forEach(id => $(id).addEventListener('change', renderCampagne));
+    $('kSearch').addEventListener('input', renderCampagne);
+    $('kGo').addEventListener('click', () => { const q = kPool().filter(c => !kDone(c)).map(c => c.id); if (q.length) kOpenCard(q[0], q); else toast('Personne à appeler dans cette sélection.'); });
+    $('kUndo').addEventListener('click', kDoUndo);
+    document.addEventListener('click', e => { const b = e.target.closest('[data-kopen]'); if (b) kOpenCard(b.dataset.kopen, kPool().map(c => c.id)); });
+  }
   renderClients(); }
 })();

@@ -106,7 +106,7 @@ table{border-collapse:collapse;width:100%;font-size:14px}
 th,td{text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 th{font-family:var(--f-data);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .tw{overflow-x:auto}
-@media (max-width:640px){.card{padding:16px}.call{width:100%}nav.tabs .in{flex-wrap:wrap;overflow:visible;gap:0;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}nav.tabs .brand{order:0;flex:1 1 calc(100% - 140px);padding-block:10px}nav.tabs #logout{order:1;margin-left:0!important}nav.tabs a{order:2;flex:1 1 22%;min-width:0;text-align:center;padding:10px 2px;font-size:14px}nav .long{display:none}}
+@media (max-width:640px){.card{padding:16px}.call{width:100%}nav.tabs .in{flex-wrap:wrap;overflow:visible;gap:0;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}nav.tabs .brand{order:0;flex:1 1 calc(100% - 140px);padding-block:10px}nav.tabs #logout{order:1;margin-left:0!important}nav.tabs a{order:2;flex:1 1 18%;min-width:0;text-align:center;padding:10px 2px;font-size:14px}nav .long{display:none}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -134,6 +134,7 @@ th{font-family:var(--f-data);font-size:11px;text-transform:uppercase;letter-spac
   <span class="brand">2A <b>Phoning</b></span>
   <a href="#accueil" data-v="accueil">Accueil</a>
   <a href="#seance" data-v="seance">Séance<span class="long"> d'appels</span></a>
+  <a href="#campagne" data-v="campagne">Campagne</a>
   <a href="#carte" data-v="carte">Carte</a>
   <a href="#clients" data-v="clients">Clients<span class="long"> et devis</span></a>
   <button id="logout" class="small" style="margin-left:8px">Se déconnecter</button>
@@ -190,6 +191,37 @@ th{font-family:var(--f-data);font-size:11px;text-transform:uppercase;letter-spac
     <div id="cardZone" style="margin-top:16px"></div>
   </section>
 
+  <section id="v-campagne" data-view="campagne" hidden>
+    <div class="panel" id="kMissing" hidden><h2>Campagne</h2><p class="muted">La liste de la campagne n’est pas encore chargée dans la base.</p></div>
+    <div id="kMain">
+      <div class="row" style="justify-content:space-between;align-items:flex-end">
+        <div><div class="eyebrow">Après le mail de la campagne</div><h1 id="kTitle">Campagne 2Avenir</h1></div>
+        <button class="btn call" id="kGo">Appeler la sélection</button>
+      </div>
+      <div class="panel" style="margin-top:16px">
+        <div class="stats" id="kStats"></div>
+        <p class="muted small" id="kInfo" style="margin:10px 0 0"></p>
+      </div>
+      <div class="panel" style="margin-top:16px">
+        <div class="row" style="align-items:flex-end">
+          <label class="f">Liste<select id="kList">
+            <option value="todo">À appeler (échecs, puis sans réponse)</option>
+            <option value="echec">Adresses en échec</option>
+            <option value="sansrep">Sans réponse au mail</option>
+            <option value="rappel">À rappeler</option>
+            <option value="faits">Déjà appelées</option>
+            <option value="all">Toute la campagne</option></select></label>
+          <label class="f">Région<select id="kReg"></select></label>
+          <label class="f">Rechercher<input id="kSearch" type="search" autocomplete="off" placeholder="Nom, département, adresse"></label>
+        </div>
+        <div class="row" style="justify-content:space-between;margin-top:12px"><span class="muted small" id="kCount"></span><button id="kUndo" class="small" hidden>Annuler le dernier appel</button></div>
+        <ul class="list" id="kRows"></ul>
+        <p class="muted small" id="kMore"></p>
+      </div>
+    </div>
+    <div id="kCard" hidden></div>
+  </section>
+
   <section id="v-carte" data-view="carte" hidden>
     <div class="grid">
       <div class="panel">
@@ -218,6 +250,6 @@ th{font-family:var(--f-data);font-size:11px;text-transform:uppercase;letter-spac
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js?v=2"></script>
-<script src="app.js"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>
