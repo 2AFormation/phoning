@@ -629,8 +629,9 @@ function cCardRender() {
     '<div class="row"><label class="f">Qui<input id="c_qui" list="c_quiL" value="' + esc(r.qui) + '"><datalist id="c_quiL">' + Object.values(MEMBRES).map(p => '<option value="' + esc(p) + '">').join('') + '<option value="Alexandre → Antoine"></datalist></label>' +
     '<label class="f">Quand (date)<input type="date" id="c_date" value="' + esc(q) + '"></label><label class="f">ou texte libre<input id="c_txt" value="' + esc(q ? '' : r.quand) + '"></label></div>' +
     '<label class="f">Contact<textarea id="c_ct" rows="2">' + esc(r.contact) + '</textarea></label>' +
-    '<div class="row" style="justify-content:flex-end"><button id="c_close">Fermer</button><button class="primary" id="c_save">Enregistrer</button></div></div>';
+    '<div class="row" style="justify-content:flex-end">' + (isNew || !TRAVAIL_OK ? '' : '<button id="c_form">Créer la formation</button>') + '<button id="c_close">Fermer</button><button class="primary" id="c_save">Enregistrer</button></div></div>';
   $('c_close').onclick = () => { cOpen = null; renderClients(); };
+  if ($('c_form')) $('c_form').onclick = () => fNewDialog(r.structure);
   $('c_save').onclick = async () => {
     const row = { rubrique: $('c_rub').value, structure: $('c_str').value.trim(), ou_on_en_est: $('c_ou').value.trim(), prochaine_action: $('c_pa').value.trim(), qui: $('c_qui').value.trim(), quand: $('c_date').value || $('c_txt').value.trim(), contact: $('c_ct').value.trim(), maj: nowIso(), maj_par: me.prenom };
     if (!row.structure) { toast('Indiquez le nom de la structure.'); return; }
@@ -655,8 +656,9 @@ const LGS = ['À réserver', 'Réservé', 'Pas besoin'];
 function lgChip(f) { const s = f.logement_statut; return s === 'Réservé' ? '<span class="chip ok">Logement réservé</span>' : s === 'À réserver' ? '<span class="chip late">Logement à réserver</span>' : ''; }
 
 // ---------- dépenses de chaque formation (justificatifs dans le stockage privé « justificatifs »)
-let DE = [], DEP_OK = false, fTab = 'infos', depArm = null;
-const DCAT = ['Logement', 'Transport', 'Repas', 'Matériel', 'Autre'];
+let DE = [], DEP_OK = false, fTab = 'infos', depArm = null, soldeArm = null;
+const DCAT = ['Logement', 'Transport', 'Repas', 'Kilomètres', 'Matériel', 'Autre'];
+const fSolde = f => !!(f && f.solde_le && f.solde_snap);
 const eur = n => (Math.round((+n || 0) * 100) / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
 async function loadDepenses() { try { DE = await fetchAll('formation_depenses', 'cree_le'); DEP_OK = true; } catch (e) { DEP_OK = false; } }
 const REC = 'Covoiturage';
@@ -718,6 +720,7 @@ function renderDepenses(f) {
   z.innerHTML = '<div id="gainZone">' + gainHtml(f) + '</div><form id="depAdd" class="dep-form"><h3>Ajouter une dépense</h3>' +
     '<div class="row seg" id="depCat">' + DCAT.map((c, i) => '<button type="button" data-c="' + c + '" aria-pressed="' + (i === 0) + '">' + c + '</button>').join('') + '</div>' +
     '<div class="row" style="align-items:flex-end"><label class="f" style="flex:2 1 180px">Quoi<input id="depLib" autocomplete="off" placeholder="ex. Hôtel 2 nuits, péage, repas du midi"></label><label class="f" style="flex:1 1 110px">Montant (€)<input id="depMt" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"></label></div>' +
+    '<div class="row" id="kmRow" hidden style="align-items:flex-end"><label class="f">Kilomètres<input id="depKm" type="text" inputmode="decimal" autocomplete="off" placeholder="ex. 250"></label><label class="f">Taux (€ / km)<input id="depTaux" type="text" inputmode="decimal" autocomplete="off" value="' + esc(ls.kmtaux || '0,50') + '"></label><span class="small muted" style="flex:1 1 100%">Le montant se calcule tout seul. Choisissez dans « Payé par » celui dont on prend la voiture : il récupère ce montant, comme s’il l’avait avancé.</span></div>' +
     '<div class="row" style="align-items:flex-end"><label class="f">Date<input id="depDate" type="date" value="' + today + '"></label><label class="f">Payé par<select id="depPar">' + pourOptions(me.prenom) + '<option value="2A Formation">2A Formation (carte pro)</option></select></label></div>' +
     '<label class="f">Justificatif (photo ou PDF)<input id="depFile" type="file" accept="image/*,application/pdf"></label>' +
     '<div class="row" style="justify-content:flex-end"><button class="primary" type="submit" id="depOk">Ajouter la dépense</button></div></form>' +
@@ -729,18 +732,23 @@ function renderDepenses(f) {
     '<div class="row" style="align-items:flex-end"><label class="f" style="flex:2 1 180px">Trajet (facultatif)<input id="recLib" autocomplete="off" placeholder="ex. aller, 2 passagers"></label>' +
     '<button class="primary" type="submit" id="recOk">Ajouter</button></div></form>' +
     '<div id="recZone">' + recListHtml(f) + '</div></div>';
+  z.classList.toggle('is-solde', fSolde(f));
   z.onchange = e => { if (/^g_/.test(e.target.id || '')) gainSave(f, e.target.id, e.target.value); };
+  z.onclick = e => { const b = e.target.closest('#g_solde, #g_rouvrir'); if (b) soldeClick(f, b.id === 'g_solde' ? 's' : 'o'); };
   let cat = DCAT[0];
-  $('depCat').onclick = e => { const b = e.target.closest('[data-c]'); if (!b) return; cat = b.dataset.c; $('depCat').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); };
+  $('depCat').onclick = e => { const b = e.target.closest('[data-c]'); if (!b) return; cat = b.dataset.c; $('depCat').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); $('kmRow').hidden = cat !== 'Kilomètres'; if (cat === 'Kilomètres') kmCalc(); };
+  $('depAdd').oninput = e => { if (e.target.id === 'depKm' || e.target.id === 'depTaux') kmCalc(); };
   $('depAdd').onsubmit = async e => {
     e.preventDefault(); const mt = parseFloat(String($('depMt').value).replace(/\s/g, '').replace(',', '.').replace(/[^0-9.]/g, ''));
     if (!(mt > 0)) { toast('Indiquez le montant.'); return; }
     $('depOk').disabled = true;
-    const d = { id: uid(), formation_id: f.id, date: $('depDate').value || today, categorie: cat, libelle: $('depLib').value.trim(), montant: Math.round(mt * 100) / 100, paye_par: $('depPar').value, justif_path: '', justif_nom: '', cree_par: me.prenom, cree_le: nowIso() };
+    let lib = $('depLib').value.trim();
+    if (cat === 'Kilomètres') { const km = num($('depKm').value), tx = $('depTaux').value.trim(); lib = (lib || 'Trajet') + (km ? ' — ' + pct(km) + ' km × ' + tx + ' €/km' : ''); ls.kmtaux = tx; try { localStorage.setItem('phoning2a', JSON.stringify(ls)); } catch (e2) {} }
+    const d = { id: uid(), formation_id: f.id, date: $('depDate').value || today, categorie: cat, libelle: lib, montant: Math.round(mt * 100) / 100, paye_par: $('depPar').value, justif_path: '', justif_nom: '', cree_par: me.prenom, cree_le: nowIso() };
     const file = $('depFile').files[0]; await uploadJustif(d, file);
     DE.push(d); const ok = await persist({ table: 'formation_depenses', op: 'upsert', row: { ...d } }, () => { DE = DE.filter(x => x.id !== d.id); });
     $('depOk').disabled = false; if (!ok) return;
-    toast('Dépense ajoutée' + (file && d.justif_path ? ' avec son justificatif' : '')); $('depLib').value = ''; $('depMt').value = ''; $('depFile').value = '';
+    toast('Dépense ajoutée' + (file && d.justif_path ? ' avec son justificatif' : '')); $('depLib').value = ''; $('depMt').value = ''; $('depFile').value = ''; $('depKm').value = '';
     $('depZone').innerHTML = depListHtml(f); fTabsRefresh(f);
   };
   $('depZone').onclick = async e => {
@@ -780,6 +788,7 @@ const ASSOC = ['Alexandre', 'Antoine'];
 const num = v => { const n = parseFloat(String(v == null ? '' : v).replace(/\s/g, '').replace(',', '.').replace(/[^0-9.-]/g, '')); return isNaN(n) ? null : n; };
 const pct = n => String(Math.round(n * 100) / 100).replace('.', ',');
 function gainCalc(f) {
+  if (fSolde(f)) { const sn = f.solde_snap; return { ...sn, gens: (sn.gens || []).map(x => ({ ...x })), fige: true }; }
   const prix = +f.prix || 0, taux = f.taux_charges == null ? 28 : +f.taux_charges, part = f.part_alexandre == null ? 50 : +f.part_alexandre;
   const ch = prix * taux / 100, dep = fTotal(f.id), rec = fRecTotal(f.id), reste = prix - ch - dep + rec;
   const encaisse = p => fRecs(f.id).filter(d => d.paye_par === p).reduce((s, d) => s + (+d.montant || 0), 0);
@@ -789,15 +798,16 @@ function gainCalc(f) {
 function gainHtml(f) {
   const g = gainCalc(f), w = x => g.prix ? Math.max(0, Math.min(100, x / g.prix * 100)).toFixed(1) : 0;
   return '<div class="gain"><div class="row" style="justify-content:space-between;align-items:baseline"><h3>Ce que l’on gagne</h3><span class="muted small">se met à jour à chaque dépense</span></div>' +
-    '<div class="row gain-in"><label class="f">Tarif (€)<input id="g_prix" inputmode="decimal" autocomplete="off" value="' + (g.prix ? pct(g.prix) : '') + '" placeholder="ex. 4500"></label>' +
-    '<label class="f">Charges (%)<input id="g_taux" inputmode="decimal" autocomplete="off" value="' + pct(g.taux) + '"></label>' +
-    '<label class="f">Part Alexandre (%)<input id="g_part" inputmode="decimal" autocomplete="off" value="' + pct(g.part) + '"></label></div>' +
+    '<div class="row gain-in"><label class="f">Tarif (€)<input id="g_prix"' + (g.fige ? ' disabled' : '') + ' inputmode="decimal" autocomplete="off" value="' + (g.prix ? pct(g.prix) : '') + '" placeholder="ex. 4500"></label>' +
+    '<label class="f">Charges (%)<input id="g_taux"' + (g.fige ? ' disabled' : '') + ' inputmode="decimal" autocomplete="off" value="' + pct(g.taux) + '"></label>' +
+    '<label class="f">Part Alexandre (%)<input id="g_part"' + (g.fige ? ' disabled' : '') + ' inputmode="decimal" autocomplete="off" value="' + pct(g.part) + '"></label></div>' +
     (!g.prix ? '<p class="muted small">Indiquez le tarif de la formation pour voir le calcul.</p>' :
     '<div class="gbar" aria-hidden="true"><i class="c" style="width:' + w(g.ch) + '%"></i><i class="d" style="width:' + w(g.dep) + '%"></i><i class="r" style="width:' + w(Math.max(0, g.reste)) + '%"></i></div>' +
     '<dl class="gain-calc"><dt>Tarif</dt><dd class="num">' + eur(g.prix) + '</dd><dt><span class="dot c"></span>Charges (' + pct(g.taux) + ' %)</dt><dd class="num">− ' + eur(g.ch) + '</dd><dt><span class="dot d"></span>Dépenses</dt><dd class="num">− ' + eur(g.dep) + '</dd>' + (g.rec ? '<dt><span class="dot v"></span>Covoiturage</dt><dd class="num">+ ' + eur(g.rec) + '</dd>' : '') +
     '<dt class="tot"><span class="dot r"></span>Reste à partager</dt><dd class="tot num' + (g.reste < 0 ? ' neg' : '') + '">' + eur(g.reste) + '</dd></dl>' +
     '<div class="gain-p">' + g.gens.map(x => '<div class="gp"><span class="small">' + esc(x.p) + ' touche</span><b class="num">' + eur(x.s + x.a - x.e) + '</b><span class="small muted">' + eur(x.s) + ' de part (' + pct(x.pc) + ' %)' + (x.a ? ' + ' + eur(x.a) + ' de frais avancés' : '') + (x.e ? ' − ' + eur(x.e) + ' de covoiturage déjà encaissé' : '') + '</span></div>').join('') + '</div>' +
-    (g.pro ? '<p class="small muted" style="margin:0">' + eur(g.pro) + ' payés avec la carte pro 2A : déjà déduits, remboursés à personne.</p>' : '')) + '</div>';
+    (g.pro ? '<p class="small muted" style="margin:0">' + eur(g.pro) + ' payés avec la carte pro 2A : déjà déduits, remboursés à personne.</p>' : '') +
+    (g.fige ? '<div class="solde-b"><b>✓ Formation soldée le ' + esc(fr(f.solde_le)) + (f.solde_par ? ' par ' + esc(f.solde_par) : '') + '</b><span class="small">Montants reçus : ' + g.gens.map(x => esc(x.p) + ' ' + eur(x.s + x.a - x.e)).join(' · ') + '. Le calcul est figé.</span><button type="button" id="g_rouvrir">' + (soldeArm === 'o' ? 'Confirmer : rouvrir le calcul' : 'Rouvrir le calcul') + '</button></div>' : '<div class="row" style="justify-content:flex-end"><button type="button" id="g_solde">' + (soldeArm === 's' ? 'Confirmer : figer et noter les montants reçus' : 'Marquer la formation comme soldée') + '</button></div>')) + '</div>';
 }
 function gainRefresh(f) { const z = $('gainZone'); if (z) z.innerHTML = gainHtml(f); }
 async function gainSave(f, id, v) {
@@ -815,18 +825,123 @@ function recListHtml(f) {
     '<ul class="list">' + L.map(d => '<li><div style="flex:1 1 140px"><b>' + esc(d.libelle || 'Covoiturage') + '</b><div class="muted small">' + esc(rel(d.date)) + ' · encaissé par ' + esc(d.paye_par) + '</div><div class="row" style="margin-top:6px"><button class="small" data-rdel="' + esc(d.id) + '">' + (depArm === d.id ? 'Confirmer la suppression' : 'Supprimer') + '</button></div></div><b class="num dep-m">+ ' + eur(d.montant) + '</b></li>').join('') + '</ul>';
 }
 
+function kmCalc() { const km = num($('depKm').value), tx = num($('depTaux').value); $('depMt').value = km > 0 && tx > 0 ? (Math.round(km * tx * 100) / 100).toFixed(2).replace('.', ',') : ''; }
+async function soldeClick(f, mode) {
+  if (soldeArm !== mode) { soldeArm = mode; gainRefresh(f); return; }
+  soldeArm = null;
+  if (mode === 's') {
+    const g = gainCalc(f); if (!g.prix) { toast('Indiquez d’abord le tarif.'); gainRefresh(f); return; }
+    const snap = { prix: g.prix, taux: g.taux, part: g.part, ch: g.ch, dep: g.dep, rec: g.rec, reste: g.reste, pro: g.pro, gens: g.gens.map(x => ({ p: x.p, pc: x.pc, s: x.s, a: x.a, e: x.e })) };
+    const old = { solde_le: f.solde_le, solde_par: f.solde_par, solde_snap: f.solde_snap };
+    Object.assign(f, { solde_le: today, solde_par: me.prenom || '', solde_snap: snap, maj: nowIso() });
+    renderDepenses(f); fTabsRefresh(f);
+    if (await persist({ table: 'formations', op: 'upsert', row: { ...f } }, () => { Object.assign(f, old); renderDepenses(f); fTabsRefresh(f); })) toast('Formation soldée');
+  } else {
+    const old = { solde_le: f.solde_le, solde_par: f.solde_par, solde_snap: f.solde_snap };
+    Object.assign(f, { solde_le: null, solde_par: null, solde_snap: null, maj: nowIso() });
+    renderDepenses(f); fTabsRefresh(f);
+    if (await persist({ table: 'formations', op: 'upsert', row: { ...f } }, () => { Object.assign(f, old); renderDepenses(f); fTabsRefresh(f); })) toast('Calcul rouvert');
+  }
+}
+
+// ===== v13 : rappels d'étapes, création depuis un client, bilan de l'année
+const RAPPELS = [
+  ['convocations', 15, /^Documents de session préparés/i, 'préparer les documents de session (convocations, émargements)'],
+  ['controle', 7, /^Documents contrôlés/i, 'faire contrôler les documents avant envoi au client'],
+  ['envoi', 5, /^Documents envoyés au client/i, 'envoyer les documents au client']
+];
+const daysTo = d => Math.round((new Date(d + 'T12:00:00') - new Date(today + 'T12:00:00')) / 864e5);
+function fRappels(f) {
+  if (!f || !fActive(f) || !dateOnly(f.date_debut)) return [];
+  const j = daysTo(dateOnly(f.date_debut)); if (j < 0) return [];
+  return RAPPELS.filter(([k, s, re]) => j <= s && fItems(f.id).some(i => re.test(i.libelle) && !i.fait)).map(r => ({ f, j, txt: r[3] }));
+}
+function remLine(f) {
+  const R = fRappels(f); if (!R.length) return '';
+  return '<div class="rem small"><b>À faire (dans ' + R[0].j + ' j) :</b> ' + R.map(r => esc(r.txt)).join(' · ') + '</div>';
+}
+function remItems() {
+  const out = [];
+  FO.slice().sort(fSort).forEach(f => fRappels(f).forEach(r => out.push('<li><div><b>' + esc(f.client || f.intitule) + ' · dans ' + r.j + ' j</b><div class="small">À faire : ' + esc(r.txt) + '</div></div><button data-fopen="' + esc(f.id) + '">Ouvrir</button></li>')));
+  return out;
+}
+
+// ----- création d'une formation depuis une fiche client (devis signé)
+function fNewDialog(structure) {
+  const old = $('fNewDlg'); if (old) old.remove();
+  const dlg = document.createElement('dialog'); dlg.id = 'fNewDlg'; dlg.className = 'fnew';
+  dlg.innerHTML = '<form id="fNewF" class="card" style="display:flex;flex-direction:column;gap:10px"><h2>Créer la formation</h2><p class="muted small" style="margin:0">Pour <b>' + esc(structure) + '</b>. Reprenez les infos du devis signé : tout reste modifiable ensuite.</p>' +
+    '<label class="f">Intitulé<input id="fn_int" required autocomplete="off" placeholder="ex. Travailler avec les familles"></label>' +
+    '<div class="row"><label class="f">Premier jour<input type="date" id="fn_d1"></label><label class="f">Dernier jour<input type="date" id="fn_d2"></label></div>' +
+    '<div class="row"><label class="f">Tarif du devis (€)<input id="fn_prix" inputmode="decimal" autocomplete="off" placeholder="ex. 4500"></label><label class="f">Lieu<input id="fn_lieu" autocomplete="off"></label></div>' +
+    '<div class="row" style="justify-content:flex-end"><button type="button" id="fn_x">Annuler</button><button class="primary" type="submit" id="fn_ok">Créer la formation</button></div></form>';
+  document.body.appendChild(dlg); dlg.showModal();
+  $('fn_x').onclick = () => dlg.close();
+  dlg.addEventListener('close', () => dlg.remove());
+  $('fNewF').onsubmit = async e => {
+    e.preventDefault(); const p = num($('fn_prix').value);
+    const o = { client: structure, intitule: $('fn_int').value.trim(), d1: $('fn_d1').value || null, d2: $('fn_d2').value || null, prix: p && p > 0 ? p : null, lieu: $('fn_lieu').value.trim() };
+    if (!o.intitule) { toast('Indiquez l’intitulé.'); return; }
+    dlg.close(); cOpen = null; fTab = 'infos'; await fCreate(o);
+  };
+}
+
+// ----- bilan de l'année
+let bilanAn = null, bilanOpen = false;
+const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+const eur0 = v => Math.round(v).toLocaleString('fr-FR') + ' €';
+const fAn = f => +String(f.date_debut || '').slice(0, 4);
+function bilanRows(an) {
+  return FO.filter(f => f.statut !== 'Annulée' && fAn(f) === an).sort(fSort).map(f => ({ f, g: +f.prix || fSolde(f) ? gainCalc(f) : null, m: +String(f.date_debut).slice(5, 7) }));
+}
+function bilanSum(rows) {
+  const t = { n: rows.length, ca: 0, ch: 0, dep: 0, rec: 0, reste: 0, A: 0, An: 0, sans: 0, soldees: 0 };
+  rows.forEach(r => { if (!r.g || !r.g.prix) { t.sans++; return; } const g = r.g; t.ca += g.prix; t.ch += g.ch; t.dep += g.dep; t.rec += g.rec || 0; t.reste += g.reste; if (fSolde(r.f)) t.soldees++;
+    g.gens.forEach(x => { const v = x.s + x.a - (x.e || 0); if (x.p === 'Alexandre') t.A += v; else t.An += v; }); });
+  return t;
+}
+function bilanHtml() {
+  if (!TRAVAIL_OK || !DEP_OK) return '';
+  const ans = [...new Set(FO.filter(f => f.statut !== 'Annulée' && f.date_debut).map(fAn))].sort(); if (!ans.length) return '';
+  if (!bilanAn || !ans.includes(bilanAn)) bilanAn = ans.includes(+today.slice(0, 4)) ? +today.slice(0, 4) : ans[ans.length - 1];
+  const rows = bilanRows(bilanAn), T = bilanSum(rows);
+  const byM = {}; rows.forEach(r => (byM[r.m] = byM[r.m] || []).push(r));
+  const months = Object.keys(byM).map(Number).sort((a, b) => a - b);
+  const line = (lab, v, cl) => '<dt' + (cl ? ' class="' + cl + '"' : '') + '>' + lab + '</dt><dd class="num' + (cl ? ' ' + cl : '') + '">' + v + '</dd>';
+  return '<details class="panel" id="bilanD"' + (bilanOpen ? ' open' : '') + '><summary><b>Bilan de l’année</b> <span class="muted small">' + bilanAn + ' · ' + eur(T.reste) + ' à partager</span></summary>' +
+    '<div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">' +
+    '<div class="row" style="justify-content:space-between;align-items:flex-end"><label class="f" style="flex:0 1 120px">Année<select id="bilanAn">' + ans.map(a => '<option' + (a === bilanAn ? ' selected' : '') + '>' + a + '</option>').join('') + '</select></label><button type="button" data-bilancsv>Exporter en CSV</button></div>' +
+    '<dl class="gain-calc">' + line('Chiffre d’affaires', eur(T.ca)) + line('<span class="dot c"></span>Charges', '− ' + eur(T.ch)) + line('<span class="dot d"></span>Dépenses', '− ' + eur(T.dep)) + (T.rec ? line('<span class="dot v"></span>Covoiturage', '+ ' + eur(T.rec)) : '') + line('<span class="dot r"></span>Reste à partager', eur(T.reste), 'tot') + '</dl>' +
+    '<div class="gain-p"><div class="gp"><span class="small">Alexandre</span><b class="num">' + eur(T.A) + '</b></div><div class="gp"><span class="small">Antoine</span><b class="num">' + eur(T.An) + '</b></div></div>' +
+    '<p class="small muted" style="margin:0">' + T.n + ' formation' + (T.n > 1 ? 's' : '') + ' · ' + T.soldees + ' soldée' + (T.soldees > 1 ? 's' : '') + (T.sans ? ' · ' + T.sans + ' sans tarif (non comptée' + (T.sans > 1 ? 's' : '') + ')' : '') + '</p>' +
+    '<table class="bilan-t"><thead><tr><th>Mois</th><th>CA</th><th>Reste</th><th>Alex.</th><th>Antoine</th></tr></thead><tbody>' + months.map(m => {
+      const s = bilanSum(byM[m]); return '<tr><td>' + MOIS[m - 1].slice(0, 4) + (MOIS[m - 1].length > 4 ? '.' : '') + ' <span class="muted">(' + s.n + ')</span></td><td class="num">' + eur0(s.ca) + '</td><td class="num">' + eur0(s.reste) + '</td><td class="num">' + eur0(s.A) + '</td><td class="num">' + eur0(s.An) + '</td></tr>'; }).join('') + '</tbody></table>' +
+    '<p class="small muted" style="margin:0">Montants à recevoir par chacun : part du reste + frais avancés − covoiturage déjà encaissé. Les formations soldées utilisent le calcul figé.</p></div></details>';
+}
+function exportBilan() {
+  const rows = bilanRows(bilanAn);
+  dlCsv('bilan_' + bilanAn + '_2A_Travail.csv', [['Formation', 'Client', 'Premier jour', 'Tarif', 'Charges', 'Dépenses', 'Covoiturage', 'Reste à partager', 'Alexandre', 'Antoine', 'Soldée le'].join(';')].concat(rows.map(r => {
+    const g = r.g; const part = p => g ? (g.gens.filter(x => x.p === p).reduce((s, x) => s + x.s + x.a - (x.e || 0), 0)) : '';
+    const n2 = v => v === '' ? '' : (Math.round(v * 100) / 100).toFixed(2).replace('.', ',');
+    return [r.f.intitule, r.f.client, r.f.date_debut, g ? n2(g.prix) : '', g ? n2(g.ch) : '', g ? n2(g.dep) : '', g ? n2(g.rec || 0) : '', g ? n2(g.reste) : '', n2(part('Alexandre')), n2(part('Antoine')), r.f.solde_le || ''].map(csvCell).join(';'); }))); toast('Bilan exporté');
+}
+document.addEventListener('toggle', e => { if (e.target && e.target.id === 'bilanD') bilanOpen = e.target.open; }, true);
+document.addEventListener('change', e => { if (e.target && e.target.id === 'bilanAn') { bilanAn = +e.target.value; bilanOpen = true; renderFormations(); } });
+document.addEventListener('click', e => { if (e.target.closest && e.target.closest('[data-bilancsv]')) exportBilan(); });
+
 function fBlock(f) {
   const it = fItems(f.id), d = it.filter(i => i.fait).length, nx = fNext(f);
   return '<div class="panel"><div class="row" style="justify-content:space-between"><h2>' + esc(f.intitule) + '</h2><div class="row" style="gap:6px">' + lgChip(f) + '<span class="chip">' + esc(f.statut) + '</span></div></div><div class="muted">' + esc([f.client, fDates(f), f.lieu].filter(Boolean).join(' · ')) + (f.responsable ? ' · Responsable : ' + esc(f.responsable) : '') + '</div>' +
-    '<div class="gauge" style="margin:10px 0"><i style="width:' + (it.length ? d / it.length * 100 : 0) + '%"></i></div><div class="row" style="justify-content:space-between"><span class="small">' + d + ' / ' + it.length + ' étapes' + (nx ? ' · <b>Prochaine :</b> ' + esc(nx.libelle) : it.length ? ' · tout est fait' : '') + (fDeps(f.id).length ? ' · Dépenses : <b>' + eur(fTotal(f.id)) + '</b>' : '') + (+f.prix ? ' · Reste à partager : <b>' + eur(gainCalc(f).reste) + '</b>' : '') + '</span><button data-fopen="' + esc(f.id) + '">Ouvrir</button></div></div>';
+    remLine(f) + '<div class="gauge" style="margin:10px 0"><i style="width:' + (it.length ? d / it.length * 100 : 0) + '%"></i></div><div class="row" style="justify-content:space-between"><span class="small">' + d + ' / ' + it.length + ' étapes' + (nx ? ' · <b>Prochaine :</b> ' + esc(nx.libelle) : it.length ? ' · tout est fait' : '') + (fDeps(f.id).length ? ' · Dépenses : <b>' + eur(fTotal(f.id)) + '</b>' : '') + (+f.prix ? ' · Reste à partager : <b>' + eur(gainCalc(f).reste) + '</b>' : '') + (fSolde(f) ? ' · <span class="chip ok">Soldée</span>' : '') + '</span><button data-fopen="' + esc(f.id) + '">Ouvrir</button></div></div>';
 }
 function renderFormations() {
   $('fMissing').hidden = TRAVAIL_OK; $('fMain').hidden = !TRAVAIL_OK || !!fOpen; $('fCard').hidden = !fOpen; if (!TRAVAIL_OK || fOpen) return;
   const act = FO.filter(fActive).sort(fSort), fin = FO.filter(f => !fActive(f)).sort((a, b) => fSort(b, a));
-  $('fList').innerHTML = (act.map(fBlock).join('') || '<div class="panel muted">Aucune formation en cours. Ajoutez la première avec le bouton ci-dessus.</div>') + (fin.length ? '<details class="panel"><summary><b>Terminées ou annulées</b> <span class="muted small">' + fin.length + '</span></summary><div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">' + fin.map(fBlock).join('') + '</div></details>' : '');
+  $('fList').innerHTML = bilanHtml() + (act.map(fBlock).join('') || '<div class="panel muted">Aucune formation en cours. Ajoutez la première avec le bouton ci-dessus.</div>') + (fin.length ? '<details class="panel"><summary><b>Terminées ou annulées</b> <span class="muted small">' + fin.length + '</span></summary><div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">' + fin.map(fBlock).join('') + '</div></details>' : '');
 }
-async function fCreate() {
-  const f = { id: uid(), intitule: 'Nouvelle formation', client: '', dates_txt: '', date_debut: null, date_fin: null, lieu: '', participants: '', responsable: me.prenom || '', statut: 'À préparer', notes: '', logement_statut: 'À réserver', logement_infos: '', logement_par: '', cree_le: nowIso(), maj: nowIso() };
+async function fCreate(o) {
+  if (!o || o.target) o = {};
+  const f = { id: uid(), intitule: o.intitule || 'Nouvelle formation', client: o.client || '', dates_txt: '', date_debut: o.d1 || null, date_fin: o.d2 || o.d1 || null, lieu: o.lieu || '', prix: o.prix || null, participants: '', responsable: me.prenom || '', statut: 'À préparer', notes: '', logement_statut: 'À réserver', logement_infos: '', logement_par: '', cree_le: nowIso(), maj: nowIso() };
   const items = FTEMPLATE.map((l, i) => ({ id: uid(), formation_id: f.id, libelle: l, ordre: i + 1, fait: false, fait_le: null, fait_par: '' }));
   FO.push(f); FI.push(...items); fOpen = f.id; location.hash = 'formations'; renderFormations(); fCardRender();
   if (await persist({ table: 'formations', op: 'upsert', row: { ...f } }, () => { FO = FO.filter(x => x.id !== f.id); FI = FI.filter(i => i.formation_id !== f.id); fOpen = null; renderFormations(); })) await persist({ table: 'formation_items', op: 'upsert', row: items.map(i => ({ ...i })) });
@@ -895,6 +1010,7 @@ function renderMonJour() {
   const items = [];
   if (TRAVAIL_OK) unseen().filter(t => t.pour === me.prenom).forEach(t => items.push('<li class="go new" data-href="#taches"><div><b>Nouvelle demande de ' + esc(t.de) + '</b><div class="small">' + esc(t.titre) + (t.detail ? ' · ' + esc(t.detail.slice(0, 80)) : '') + '</div></div>' + dueChip(dateOnly(t.echeance)) + '<span class="chev" aria-hidden="true">›</span></li>'));
   if (TRAVAIL_OK) mt.filter(t => !unseen().includes(t) && dateOnly(t.echeance) && dateOnly(t.echeance) <= today).forEach(t => items.push('<li><button class="chk" data-tdone="' + esc(t.id) + '" aria-label="Marquer comme fait"></button><div><b>' + esc(t.titre) + '</b><div class="muted small">De ' + esc(t.de || '') + '</div></div>' + dueChip(dateOnly(t.echeance)) + '</li>'));
+  if (TRAVAIL_OK) remItems().forEach(h => items.push(h));
   calls.filter(x => x.a.rappel && x.a.rappel <= today).forEach(x => items.push('<li class="go" ' + (x.src === 'K' ? 'data-kopen' : 'data-open') + '="' + esc(x.id) + '"><div><b>Rappeler ' + esc(x.nom) + '</b><div class="muted small">' + esc(depLabel(x.c)) + (x.a.pers ? ' · ' + esc(x.a.pers) : '') + '</div></div>' + dueChip(x.a.rappel) + '<span class="chev" aria-hidden="true">›</span></li>'));
   ca.filter(r => dateOnly(r.quand) && dateOnly(r.quand) <= today).forEach(r => items.push('<li class="go" data-href="#clients"><div><b>' + esc(r.structure) + '</b><div class="small">' + esc(r.prochaine_action || r.ou_on_en_est) + '</div></div>' + dueChip(dateOnly(r.quand)) + '<span class="chev" aria-hidden="true">›</span></li>'));
   $('mjList').innerHTML = items.slice(0, 8).join('') + (items.length > 8 ? '<li class="muted small">Et ' + (items.length - 8) + ' autres.</li>' : '') || '<li class="muted">Rien d’urgent aujourd’hui : c’est le bon moment pour appeler.</li>';
