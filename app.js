@@ -974,7 +974,7 @@ function fSuiviHtml(f) {
     '<h3>Liens utiles</h3><ul class="list" id="f_liens">' + liensHtml(f) + '</ul>' +
     '<div class="row"><label class="f" style="flex:1 1 120px">Nom du lien<input id="f_lt" autocomplete="off" placeholder="ex. Dossier OneDrive"></label><label class="f" style="flex:2 1 180px">Adresse<input id="f_lu" inputmode="url" autocomplete="off" placeholder="https://…"></label><button type="button" id="f_ladd">Ajouter</button></div>' +
     '<h3>Retours après la session</h3><label class="f">Ce qui a bien marché, ce qu’il faut changer<textarea id="f_ret" rows="4" placeholder="Retours des stagiaires, du client, idées pour la prochaine fois">' + esc(f.retours || '') + '</textarea></label>' +
-    '<div class="row" style="justify-content:space-between"><button type="button" id="f_ics">Ajouter à mon agenda</button><span class="muted small" id="f_retm"></span></div></div>';
+    '<div class="row" style="justify-content:space-between"><button type="button" id="f_ics">Ajouter à mon agenda</button><button type="button" id="f_dup">Dupliquer cette formation</button><span class="muted small" id="f_retm"></span></div></div>';
 }
 function fSuiviInit(f) {
   const save = async msg => { f.maj = nowIso(); if (await persist({ table: 'formations', op: 'upsert', row: { ...f } }) && msg) toast(msg); };
@@ -986,7 +986,7 @@ function fSuiviInit(f) {
   };
   $('f_liens').onclick = async e => { const b = e.target.closest('[data-ldel]'); if (!b) return; f.liens = liensOf(f).filter((x, i) => i !== +b.dataset.ldel); $('f_liens').innerHTML = liensHtml(f); await save('Lien retiré'); };
   $('f_ret').onchange = async () => { f.retours = $('f_ret').value.trim(); await save('Retours enregistrés'); };
-  $('f_ics').onclick = () => exportIcs([f]);
+  $('f_ics').onclick = () => exportIcs([f]); $('f_dup').onclick = () => fDupDialog(f);
 }
 
 // ----- agenda téléphone (.ics)
@@ -1005,7 +1005,7 @@ function exportIcs(L) {
   l.download = L.length === 1 ? 'formation_' + (L[0].client || L[0].intitule).replace(/[^\w]+/g, '_').slice(0, 30) + '.ics' : 'formations_2A_Travail.ics'; document.body.appendChild(l); l.click(); l.remove(); toast(L.length === 1 ? 'Fichier agenda prêt : ouvrez-le pour l’ajouter' : L.length + ' formations exportées');
 }
 document.addEventListener('click', e => { if (e.target.closest && e.target.closest('[data-icsall]')) exportIcs(FO.filter(f => f.statut !== 'Annulée' && dateOnly(f.date_debut) && dateOnly(f.date_fin || f.date_debut) >= today).sort(fSort)); });
-const icsBarHtml = () => FO.some(f => f.statut !== 'Annulée' && dateOnly(f.date_debut) && dateOnly(f.date_fin || f.date_debut) >= today) ? '<div class="row" style="justify-content:flex-end"><button type="button" class="small" data-icsall>Toutes les formations à venir dans mon agenda</button></div>' : '';
+const icsBarHtml0 = () => FO.some(f => f.statut !== 'Annulée' && dateOnly(f.date_debut) && dateOnly(f.date_fin || f.date_debut) >= today) ? '<div class="row" style="justify-content:flex-end"><button type="button" class="small" data-icsall>Toutes les formations à venir dans mon agenda</button></div>' : '';
 
 // ----- bilan : objectif et parcours commercial
 function objectifHtml(T, rows) {
@@ -1053,6 +1053,63 @@ async function pjQueue(d, f2, path, old) {
   ls.pjq = (ls.pjq || []).filter(p => p !== path).concat([path]); save(); syncChip(); return true;
 }
 
+// ===== v15 : sauvegarde Excel, dupliquer une formation
+const icsBarHtml = () => icsBarHtml0() + '<div class="row" style="justify-content:flex-end"><button type="button" class="small" data-backup>Sauvegarde Excel</button></div>';
+const crcT = (() => { const t = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = b => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = crcT[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+function zipStore(files) {
+  const enc = new TextEncoder(), out = [], cen = []; let off = 0;
+  files.forEach(f => {
+    const nm = enc.encode(f.name), crc = crc32(f.data), n = f.data.length;
+    const h = new DataView(new ArrayBuffer(30)); h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(12, 0x21, true); h.setUint32(14, crc, true); h.setUint32(18, n, true); h.setUint32(22, n, true); h.setUint16(26, nm.length, true);
+    const c = new DataView(new ArrayBuffer(46)); c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(14, 0x21, true); c.setUint32(16, crc, true); c.setUint32(20, n, true); c.setUint32(24, n, true); c.setUint16(28, nm.length, true); c.setUint32(42, off, true);
+    out.push(new Uint8Array(h.buffer), nm, f.data); cen.push(new Uint8Array(c.buffer), nm); off += 30 + nm.length + n;
+  });
+  const cs = cen.reduce((s, a) => s + a.length, 0), e = new DataView(new ArrayBuffer(22)); e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, cs, true); e.setUint32(16, off, true);
+  return new Blob([...out, ...cen, new Uint8Array(e.buffer)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+const xe = s => String(s).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const xcol = i => { let s = ''; for (i++; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + (i - 1) % 26) + s; return s; };
+function sheetXml(rows) {
+  const keys = []; rows.forEach(r => Object.keys(r).forEach(k => { if (!keys.includes(k)) keys.push(k); }));
+  const cell = (v, r, c) => { const ref = xcol(c) + r; if (v === null || v === undefined || v === '') return ''; if (typeof v === 'number' && isFinite(v)) return '<c r="' + ref + '"><v>' + v + '</v></c>'; if (typeof v === 'boolean') v = v ? 'oui' : 'non'; if (typeof v === 'object') v = JSON.stringify(v); return '<c r="' + ref + '" t="inlineStr"><is><t xml:space="preserve">' + xe(v) + '</t></is></c>'; };
+  const body = [keys].concat(rows.map(r => keys.map(k => r[k]))).map((l, i) => '<row r="' + (i + 1) + '">' + l.map((v, c) => cell(v, i + 1, c)).join('') + '</row>').join('');
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' + body + '</sheetData></worksheet>';
+}
+function xlsxBlob(sheets) {
+  const enc = new TextEncoder(), F = (name, txt) => ({ name, data: enc.encode(txt) }), H = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>', R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const files = [F('[Content_Types].xml', H + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' + sheets.map((s, i) => '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join('') + '</Types>'),
+    F('_rels/.rels', H + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="' + R + '/officeDocument" Target="xl/workbook.xml"/></Relationships>'),
+    F('xl/workbook.xml', H + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="' + R + '"><sheets>' + sheets.map((s, i) => '<sheet name="' + xe(s[0]).slice(0, 31) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>').join('') + '</sheets></workbook>'),
+    F('xl/_rels/workbook.xml.rels', H + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + sheets.map((s, i) => '<Relationship Id="rId' + (i + 1) + '" Type="' + R + '/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>').join('') + '</Relationships>')]
+    .concat(sheets.map((s, i) => F('xl/worksheets/sheet' + (i + 1) + '.xml', sheetXml(s[1]))));
+  return zipStore(files);
+}
+function exportBackup() {
+  const S = [['Clients', CLI], ['Formations', FO], ['Étapes', FI], ['Dépenses', DE], ['Tâches', TA], ['Notes', NO]].map(([n, L]) => [n, (L || []).map(r => ({ ...r }))]);
+  const blob = xlsxBlob(S), l = document.createElement('a'); l.href = URL.createObjectURL(blob); l.download = 'Sauvegarde_2A_Travail_' + today + '.xlsx'; document.body.appendChild(l); l.click(); l.remove();
+  toast('Sauvegarde prête : rangez-la dans OneDrive');
+}
+document.addEventListener('click', e => { if (e.target.closest && e.target.closest('[data-backup]')) exportBackup(); });
+
+// ----- dupliquer une formation (2e session, reconduction)
+function fDupDialog(f) {
+  const old = $('fDupDlg'); if (old) old.remove();
+  const dlg = document.createElement('dialog'); dlg.id = 'fDupDlg'; dlg.className = 'fnew';
+  dlg.innerHTML = '<form id="fDupF" class="card" style="display:flex;flex-direction:column;gap:10px"><h2>Dupliquer la formation</h2><p class="muted small" style="margin:0">Pour <b>' + esc(f.client || 'cette structure') + '</b>. Tarif, lieu, charges et répartition sont repris ; les 13 étapes repartent à zéro.</p>' +
+    '<label class="f">Intitulé<input id="fd_int" required autocomplete="off" value="' + esc(f.intitule) + '"></label>' +
+    '<div class="row"><label class="f">Premier jour<input type="date" id="fd_d1" required></label><label class="f">Dernier jour<input type="date" id="fd_d2"></label></div>' +
+    '<div class="row"><label class="f">Tarif (€)<input id="fd_prix" inputmode="decimal" autocomplete="off" value="' + esc(f.prix || '') + '"></label><label class="f">Lieu<input id="fd_lieu" autocomplete="off" value="' + esc(f.lieu || '') + '"></label></div>' +
+    '<div class="row" style="justify-content:flex-end"><button type="button" id="fd_x">Annuler</button><button class="primary" type="submit">Dupliquer</button></div></form>';
+  document.body.appendChild(dlg); dlg.showModal();
+  $('fd_x').onclick = () => dlg.close(); dlg.addEventListener('close', () => dlg.remove());
+  $('fDupF').onsubmit = async e => {
+    e.preventDefault(); const p = num($('fd_prix').value), d1 = $('fd_d1').value; if (!d1) { toast('Indiquez le premier jour.'); return; }
+    dlg.close(); fTab = 'infos';
+    await fCreate({ client: f.client, intitule: $('fd_int').value.trim() || f.intitule, d1, d2: $('fd_d2').value || null, prix: p && p > 0 ? p : null, lieu: $('fd_lieu').value.trim(), taux: f.taux_charges, part: f.part_alexandre, resp: f.responsable });
+  };
+}
+
 function fBlock(f) {
   const it = fItems(f.id), d = it.filter(i => i.fait).length, nx = fNext(f);
   return '<div class="panel"><div class="row" style="justify-content:space-between"><h2>' + esc(f.intitule) + '</h2><div class="row" style="gap:6px">' + lgChip(f) + '<span class="chip">' + esc(f.statut) + '</span></div></div><div class="muted">' + esc([f.client, fDates(f), f.lieu].filter(Boolean).join(' · ')) + (f.responsable ? ' · Responsable : ' + esc(f.responsable) : '') + '</div>' +
@@ -1066,6 +1123,7 @@ function renderFormations() {
 async function fCreate(o) {
   if (!o || o.target) o = {};
   const f = { id: uid(), intitule: o.intitule || 'Nouvelle formation', client: o.client || '', dates_txt: '', date_debut: o.d1 || null, date_fin: o.d2 || o.d1 || null, lieu: o.lieu || '', prix: o.prix || null, participants: '', responsable: me.prenom || '', statut: 'À préparer', notes: '', logement_statut: 'À réserver', logement_infos: '', logement_par: '', cree_le: nowIso(), maj: nowIso() };
+  if (o.taux != null) f.taux_charges = o.taux; if (o.part != null) f.part_alexandre = o.part; if (o.resp) f.responsable = o.resp;
   const items = FTEMPLATE.map((l, i) => ({ id: uid(), formation_id: f.id, libelle: l, ordre: i + 1, fait: false, fait_le: null, fait_par: '' }));
   FO.push(f); FI.push(...items); fOpen = f.id; location.hash = 'formations'; renderFormations(); fCardRender();
   if (await persist({ table: 'formations', op: 'upsert', row: { ...f } }, () => { FO = FO.filter(x => x.id !== f.id); FI = FI.filter(i => i.formation_id !== f.id); fOpen = null; renderFormations(); })) await persist({ table: 'formation_items', op: 'upsert', row: items.map(i => ({ ...i })) });
