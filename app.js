@@ -63,7 +63,7 @@ const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLow
 const isNet = e => !e || navigator.onLine === false || /fetch|network|timeout|failed|load failed|abort/i.test(e.message || '');
 let flushing = false;
 const pending = () => (ls.outbox || []).length;
-function syncChip() { const s = $('sync'); if (!s) return; const n = pending(); s.hidden = !n; s.textContent = n + ' en attente d’envoi'; }
+function syncChip() { const s = $('sync'); if (!s) return; const n = pending() + (ls.pjq || []).length; s.hidden = !n; s.textContent = n + ' en attente d’envoi'; }
 async function run(job) {
   const q = sb.from(job.table);
   const { error } = job.op === 'delete' ? await q.delete().eq(job.key, job.val) : await q.upsert(job.row);
@@ -130,7 +130,7 @@ async function boot() {
     etab.forEach(e => C[e.id] = { id: e.id, k: e.genre, reg: e.region || 'Non précisé', dep: e.dep || '', nom: e.nom, qui: e.interlocuteur || '', tel: e.tel || '', tel0: e.tel || '', intr: false, mail: e.email || '', env: e.date_mail || '', ech: !!e.mail_en_echec, type: e.type || '', gest: e.gestionnaire || '', ville: e.ville || '', asso: e.asso_contactee || '' });
     ALL = Object.values(C); A = {}; app.forEach(r => A[r.etab_id] = fromRow(r));
     CLI = cli; inf.forEach(i => INFOS[i.cle] = i.valeur);
-    await loadNumeros(); await loadCampagne(); await loadTravail(); await loadDepenses(); syncChip(); flush();
+    await loadNumeros(); await loadCampagne(); await loadTravail(); await loadDepenses(); await loadReglages(); syncChip(); flush();
     status(''); initViews(); route();
     sb.channel('appels').on('postgres_changes', { event: '*', schema: 'public', table: 'appels' }, p => {
       if (p.eventType === 'DELETE') delete A[p.old.etab_id]; else A[p.new.etab_id] = fromRow(p.new);
@@ -528,8 +528,8 @@ async function loadTravail() {
   try { const r = await sb.from('clients').select('maj').limit(1); CLI_EDIT = !r.error; } catch (e) { CLI_EDIT = false; }
 }
 let rlT;
-function watchTravail() { ['taches', 'formations', 'formation_items', 'notes', 'clients', 'formation_depenses'].forEach(t => sb.channel('w_' + t).on('postgres_changes', { event: '*', schema: 'public', table: t }, () => { clearTimeout(rlT); rlT = setTimeout(reloadTravail, 500); }).subscribe()); }
-async function reloadTravail() { try { await loadTravail(); await loadDepenses(); CLI = await fetchAll('clients', 'ordre'); } catch (e) {} refreshCurrent(); depLive(); }
+function watchTravail() { ['taches', 'formations', 'formation_items', 'notes', 'clients', 'formation_depenses', 'reglages'].forEach(t => sb.channel('w_' + t).on('postgres_changes', { event: '*', schema: 'public', table: t }, () => { clearTimeout(rlT); rlT = setTimeout(reloadTravail, 500); }).subscribe()); }
+async function reloadTravail() { try { await loadTravail(); await loadDepenses(); await loadReglages(); CLI = await fetchAll('clients', 'ordre'); } catch (e) {} refreshCurrent(); depLive(); }
 
 const incoming = () => TA.filter(t => !t.fait && t.pour === me.prenom);
 const unseen = () => TA.filter(t => (t.pour === me.prenom && t.de && t.de !== me.prenom && !t.vu) || (t.de === me.prenom && t.fait && t.fait_par !== me.prenom && t.retour_vu === false));
@@ -646,7 +646,7 @@ function exportClients() { dlCsv('clients_2A_Travail_' + today + '.csv', [['Rubr
 
 // ----- formations
 const FSTAT = ['À préparer', 'Dates fixées', 'En cours', 'Terminée', 'Annulée'];
-const FTEMPLATE = ['Convention signée reçue', 'Dates, lieu et nombre de participants confirmés', 'Programme et fiche pédagogique du devis signé retrouvés', 'Liste des participants et questionnaires reçus', 'Documents de session préparés (convocations, émargements)', 'Documents contrôlés par Antoine ou Alexandre (intitulé, dates, horaires, lieu, prix, objectifs)', 'Documents envoyés au client', 'Formation réalisée', 'Émargements et évaluations récupérés', 'Certificats et attestations envoyés', 'Facture émise'];
+const FTEMPLATE = ['Convention signée reçue', 'Dates, lieu et nombre de participants confirmés', 'Programme et fiche pédagogique du devis signé retrouvés', 'Liste des participants et questionnaires reçus', 'Documents de session préparés (convocations, émargements)', 'Documents contrôlés par Antoine ou Alexandre (intitulé, dates, horaires, lieu, prix, objectifs)', 'Documents envoyés au client', 'Formation réalisée', 'Émargements et évaluations récupérés', 'Certificats et attestations envoyés', 'Facture émise', 'Fiche de synthèse envoyée au client (sous 8 jours après la session)', 'Évaluation à froid envoyée'];
 const fItems = id => FI.filter(i => i.formation_id === id).sort((a, b) => a.ordre - b.ordre);
 const fDates = f => f.dates_txt || (f.date_debut ? fr(f.date_debut) + (f.date_fin && f.date_fin !== f.date_debut ? ' au ' + fr(f.date_fin) : '') : 'Dates à fixer');
 const fActive = f => f.statut !== 'Terminée' && f.statut !== 'Annulée';
@@ -686,17 +686,20 @@ async function shrink(file) { // photo de téléphone → JPEG 1800 px max, plus
 }
 async function uploadJustif(d, file) {
   if (!file) return true;
-  if (navigator.onLine === false) { toast('Pas de réseau : ajoutez le justificatif plus tard.'); return false; }
-  const f2 = await shrink(file), safe = f2.name.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.-]+/g, '_').slice(-60);
-  const path = d.formation_id + '/' + d.id + '-' + safe;
-  toast('Envoi du justificatif…');
-  const { error } = await sb.storage.from('justificatifs').upload(path, f2, { upsert: true, contentType: f2.type || 'application/octet-stream' });
-  if (error) { toast('Le justificatif n’a pas pu être envoyé : réessayez.'); return false; }
-  if (d.justif_path && d.justif_path !== path) sb.storage.from('justificatifs').remove([d.justif_path]);
-  d.justif_path = path; d.justif_nom = file.name; return true;
+  const f2 = await shrink(file), safe = f2.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w.-]+/g, '_').slice(-60);
+  const path = d.formation_id + '/' + d.id + '-' + safe, old = d.justif_path && d.justif_path !== path ? d.justif_path : '';
+  if (navigator.onLine !== false) {
+    toast('Envoi du justificatif…');
+    let error = null; try { ({ error } = await sb.storage.from('justificatifs').upload(path, f2, { upsert: true, contentType: f2.type || 'application/octet-stream' })); } catch (e) { error = e; }
+    if (!error) { if (old) sb.storage.from('justificatifs').remove([old]); d.justif_path = path; d.justif_nom = file.name; return true; }
+    if (!isNet(error)) { toast('Le justificatif n’a pas pu être envoyé : réessayez.'); return false; }
+  }
+  if (!await pjQueue(d, f2, path, old)) return false;
+  d.justif_path = path; d.justif_nom = file.name; toast('Hors connexion : photo gardée, envoi dès le retour du réseau'); return true;
 }
 async function openJustif(path) {
   const w = window.open('', '_blank');
+  if ((ls.pjq || []).includes(path)) { let rec = null; try { rec = await pjGet(path); } catch (e) {} if (rec) { const u = URL.createObjectURL(rec.blob); if (w) w.location = u; else location.href = u; return; } }
   const { data, error } = await sb.storage.from('justificatifs').createSignedUrl(path, 600);
   if (error || !data) { if (w) w.close(); toast('Justificatif introuvable.'); return; }
   if (w) w.location = data.signedUrl; else location.href = data.signedUrl;
@@ -861,7 +864,7 @@ function remLine(f) {
   return '<div class="rem small"><b>À faire (dans ' + R[0].j + ' j) :</b> ' + R.map(r => esc(r.txt)).join(' · ') + '</div>';
 }
 function remItems() {
-  const out = [];
+  const out = payItems().concat(devisItems());
   FO.slice().sort(fSort).forEach(f => fRappels(f).forEach(r => out.push('<li><div><b>' + esc(f.client || f.intitule) + ' · dans ' + r.j + ' j</b><div class="small">À faire : ' + esc(r.txt) + '</div></div><button data-fopen="' + esc(f.id) + '">Ouvrir</button></li>')));
   return out;
 }
@@ -916,7 +919,7 @@ function bilanHtml() {
     '<p class="small muted" style="margin:0">' + T.n + ' formation' + (T.n > 1 ? 's' : '') + ' · ' + T.soldees + ' soldée' + (T.soldees > 1 ? 's' : '') + (T.sans ? ' · ' + T.sans + ' sans tarif (non comptée' + (T.sans > 1 ? 's' : '') + ')' : '') + '</p>' +
     '<table class="bilan-t"><thead><tr><th>Mois</th><th>CA</th><th>Reste</th><th>Alex.</th><th>Antoine</th></tr></thead><tbody>' + months.map(m => {
       const s = bilanSum(byM[m]); return '<tr><td>' + MOIS[m - 1].slice(0, 4) + (MOIS[m - 1].length > 4 ? '.' : '') + ' <span class="muted">(' + s.n + ')</span></td><td class="num">' + eur0(s.ca) + '</td><td class="num">' + eur0(s.reste) + '</td><td class="num">' + eur0(s.A) + '</td><td class="num">' + eur0(s.An) + '</td></tr>'; }).join('') + '</tbody></table>' +
-    '<p class="small muted" style="margin:0">Montants à recevoir par chacun : part du reste + frais avancés − covoiturage déjà encaissé. Les formations soldées utilisent le calcul figé.</p></div></details>';
+    objectifHtml(T, rows) + funnelHtml(bilanAn) + '<p class="small muted" style="margin:0">Montants à recevoir par chacun : part du reste + frais avancés − covoiturage déjà encaissé. Les formations soldées utilisent le calcul figé.</p></div></details>';
 }
 function exportBilan() {
   const rows = bilanRows(bilanAn);
@@ -929,15 +932,136 @@ document.addEventListener('toggle', e => { if (e.target && e.target.id === 'bila
 document.addEventListener('change', e => { if (e.target && e.target.id === 'bilanAn') { bilanAn = +e.target.value; bilanOpen = true; renderFormations(); } });
 document.addEventListener('click', e => { if (e.target.closest && e.target.closest('[data-bilancsv]')) exportBilan(); });
 
+// ===== v14 : paiement, liens, retours, agenda (.ics), objectif, parcours commercial, photos hors connexion
+let RG = {};
+async function loadReglages() { try { const r = await fetchAll('reglages', 'cle'); RG = {}; r.forEach(x => RG[x.cle] = x.valeur); } catch (e) { RG = RG || {}; } }
+const OBJ_KEY = 'objectif_annuel_par_personne';
+const objectif = () => { const v = +RG[OBJ_KEY]; return v > 0 ? v : 48000; };
+
+// ----- facture / paiement
+const payState = f => f.paye_le ? 'paye' : f.facture_le ? 'attente' : 'afaire';
+const joursDepuis = d => -daysTo(d);
+function payLine(f) {
+  if (!f || f.statut === 'Annulée' || !+f.prix) return '';
+  const s = payState(f);
+  if (s === 'paye') return '<div class="small" style="margin-top:6px"><span class="chip ok">Payée le ' + esc(fdate(f.paye_le)) + '</span></div>';
+  if (s === 'attente') { const j = joursDepuis(dateOnly(f.facture_le)); return '<div class="small" style="margin-top:6px"><span class="chip ' + (j >= 30 ? 'late' : 'soon') + '">Facture envoyée le ' + esc(fdate(f.facture_le)) + ' · en attente depuis ' + j + ' j</span></div>'; }
+  return '';
+}
+function fdate(d) { const s = dateOnly(d); return s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : ''; }
+function payItems() {
+  const out = [];
+  FO.forEach(f => { if (f.statut === 'Annulée' || payState(f) !== 'attente') return; const j = joursDepuis(dateOnly(f.facture_le)); if (j < 30) return;
+    out.push('<li><div><b>' + esc(f.client || f.intitule) + ' · facture non payée</b><div class="small">Envoyée il y a ' + j + ' jours : relancer le client pour le paiement</div></div><button data-fopen="' + esc(f.id) + '">Ouvrir</button></li>'); });
+  return out;
+}
+function devisItems() {
+  const out = [];
+  CLI.forEach(r => { if (!/^Devis envoyés/i.test(r.rubrique || '') || !/^\d{4}-\d{2}-\d{2}$/.test(r.quand || '') || r.quand > today || !isMe(r.qui)) return;
+    out.push('<li><div><b>' + esc(r.structure) + ' · devis à relancer</b><div class="small">' + esc(r.prochaine_action || 'Relancer le devis') + ' · prévu ' + esc(rel(r.quand)) + '</div></div></li>'); });
+  return out;
+}
+
+// ----- bloc « Suivi » dans l'onglet Infos : facturation, liens utiles, retours
+const liensOf = f => Array.isArray(f.liens) ? f.liens : [];
+function lienUrl(u) { u = String(u || '').trim(); if (!u) return ''; if (!/^https?:\/\//i.test(u)) u = 'https://' + u; try { const x = new URL(u); return /^https?:$/.test(x.protocol) && x.hostname.includes('.') ? x.href : ''; } catch (e) { return ''; } }
+function liensHtml(f) {
+  const L = liensOf(f);
+  return (L.map((l, i) => '<li><div style="min-width:0"><a href="' + esc(l.u) + '" target="_blank" rel="noopener noreferrer"><b>' + esc(l.t || l.u) + '</b></a></div><button type="button" class="small" data-ldel="' + i + '">Retirer</button></li>').join('')) || '<li class="muted">Aucun lien pour le moment.</li>';
+}
+function fSuiviHtml(f) {
+  return '<div class="suivi"><h3>Facturation</h3><div class="row"><label class="f">Facture envoyée le<input type="date" id="f_fact" value="' + esc(dateOnly(f.facture_le)) + '"></label><label class="f">Payée le<input type="date" id="f_paye" value="' + esc(dateOnly(f.paye_le)) + '"></label></div><div id="f_payl">' + payLine(f) + '</div>' +
+    '<h3>Liens utiles</h3><ul class="list" id="f_liens">' + liensHtml(f) + '</ul>' +
+    '<div class="row"><label class="f" style="flex:1 1 120px">Nom du lien<input id="f_lt" autocomplete="off" placeholder="ex. Dossier OneDrive"></label><label class="f" style="flex:2 1 180px">Adresse<input id="f_lu" inputmode="url" autocomplete="off" placeholder="https://…"></label><button type="button" id="f_ladd">Ajouter</button></div>' +
+    '<h3>Retours après la session</h3><label class="f">Ce qui a bien marché, ce qu’il faut changer<textarea id="f_ret" rows="4" placeholder="Retours des stagiaires, du client, idées pour la prochaine fois">' + esc(f.retours || '') + '</textarea></label>' +
+    '<div class="row" style="justify-content:space-between"><button type="button" id="f_ics">Ajouter à mon agenda</button><span class="muted small" id="f_retm"></span></div></div>';
+}
+function fSuiviInit(f) {
+  const save = async msg => { f.maj = nowIso(); if (await persist({ table: 'formations', op: 'upsert', row: { ...f } }) && msg) toast(msg); };
+  const dates = async () => { f.facture_le = $('f_fact').value || null; f.paye_le = $('f_paye').value || null; $('f_payl').innerHTML = payLine(f); await save('Facturation enregistrée'); };
+  $('f_fact').onchange = dates; $('f_paye').onchange = dates;
+  $('f_ladd').onclick = async () => {
+    const u = lienUrl($('f_lu').value); if (!u) { toast('Adresse du lien non valide.'); return; }
+    f.liens = liensOf(f).concat([{ t: $('f_lt').value.trim() || new URL(u).hostname, u }]); $('f_liens').innerHTML = liensHtml(f); $('f_lt').value = ''; $('f_lu').value = ''; await save('Lien ajouté');
+  };
+  $('f_liens').onclick = async e => { const b = e.target.closest('[data-ldel]'); if (!b) return; f.liens = liensOf(f).filter((x, i) => i !== +b.dataset.ldel); $('f_liens').innerHTML = liensHtml(f); await save('Lien retiré'); };
+  $('f_ret').onchange = async () => { f.retours = $('f_ret').value.trim(); await save('Retours enregistrés'); };
+  $('f_ics').onclick = () => exportIcs([f]);
+}
+
+// ----- agenda téléphone (.ics)
+const icsEsc = s => String(s || '').replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/([,;])/g, '\\$1');
+const icsDay = (d, plus) => { const x = new Date(dateOnly(d) + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + (plus || 0)); return x.toISOString().slice(0, 10).replace(/-/g, ''); };
+const icsFold = l => { const out = []; while (l.length > 60) { out.push(l.slice(0, 60)); l = ' ' + l.slice(60); } out.push(l); return out.join('\r\n'); };
+function icsText(L) {
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+  const ev = L.filter(f => dateOnly(f.date_debut)).map(f => ['BEGIN:VEVENT', 'UID:' + f.id + '@2aformation.com', 'DTSTAMP:' + stamp, 'DTSTART;VALUE=DATE:' + icsDay(f.date_debut), 'DTEND;VALUE=DATE:' + icsDay(dateOnly(f.date_fin) || f.date_debut, 1),
+    'SUMMARY:' + icsEsc('Formation : ' + (f.client ? f.client + ' – ' : '') + f.intitule), f.lieu ? 'LOCATION:' + icsEsc(f.lieu) : '', 'DESCRIPTION:' + icsEsc((f.dates_txt ? 'Dates : ' + f.dates_txt + '\n' : '') + (f.participants ? 'Participants : ' + f.participants + '\n' : '') + (f.responsable ? 'Responsable : ' + f.responsable : '')), 'END:VEVENT'].filter(Boolean).map(icsFold).join('\r\n'));
+  return ev.length ? 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//2A Formation//2A Travail//FR\r\nCALSCALE:GREGORIAN\r\n' + ev.join('\r\n') + '\r\nEND:VCALENDAR\r\n' : '';
+}
+function exportIcs(L) {
+  const t = icsText(L); if (!t) { toast('Ajoutez d’abord le premier jour de la formation.'); return; }
+  const blob = new Blob([t], { type: 'text/calendar;charset=utf-8' }), l = document.createElement('a'); l.href = URL.createObjectURL(blob);
+  l.download = L.length === 1 ? 'formation_' + (L[0].client || L[0].intitule).replace(/[^\w]+/g, '_').slice(0, 30) + '.ics' : 'formations_2A_Travail.ics'; document.body.appendChild(l); l.click(); l.remove(); toast(L.length === 1 ? 'Fichier agenda prêt : ouvrez-le pour l’ajouter' : L.length + ' formations exportées');
+}
+document.addEventListener('click', e => { if (e.target.closest && e.target.closest('[data-icsall]')) exportIcs(FO.filter(f => f.statut !== 'Annulée' && dateOnly(f.date_debut) && dateOnly(f.date_fin || f.date_debut) >= today).sort(fSort)); });
+const icsBarHtml = () => FO.some(f => f.statut !== 'Annulée' && dateOnly(f.date_debut) && dateOnly(f.date_fin || f.date_debut) >= today) ? '<div class="row" style="justify-content:flex-end"><button type="button" class="small" data-icsall>Toutes les formations à venir dans mon agenda</button></div>' : '';
+
+// ----- bilan : objectif et parcours commercial
+function objectifHtml(T, rows) {
+  const obj = objectif(), pc = v => Math.max(0, Math.min(100, Math.round(v / obj * 100)));
+  let enc = 0, att = 0, nf = 0; rows.forEach(r => { if (!r.g || !r.g.prix) return; if (r.f.paye_le) enc += r.g.prix; else if (r.f.facture_le) att += r.g.prix; else nf += r.g.prix; });
+  const bar = (p, v) => '<div class="gp"><span class="small">' + p + '</span><b class="num">' + eur0(v) + '</b><div class="gbar" style="height:10px"><i class="v" style="width:' + pc(v) + '%;background:var(--accent)"></i></div><span class="small muted">' + Math.round(v / obj * 100) + ' % de l’objectif</span></div>';
+  return '<div class="obj"><h3 style="margin:0">Objectif de l’année</h3><div class="gain-p">' + bar('Alexandre', T.A) + bar('Antoine', T.An) + '</div>' +
+    '<label class="f" style="flex:none;max-width:260px">Objectif par personne (€ par an)<input id="obj_v" inputmode="numeric" value="' + Math.round(obj) + '"></label>' +
+    '<p class="small muted" style="margin:0">Encaissé : <b>' + eur0(enc) + '</b> · facturé, en attente : <b>' + eur0(att) + '</b> · pas encore facturé : <b>' + eur0(nf) + '</b> (chiffre d’affaires des formations de ' + bilanAn + ').</p></div>';
+}
+document.addEventListener('change', async e => {
+  if (!e.target || e.target.id !== 'obj_v') return; const v = Math.round(num(e.target.value)); if (!(v > 0)) { toast('Indiquez un montant.'); e.target.value = Math.round(objectif()); return; }
+  RG[OBJ_KEY] = String(v); bilanOpen = true; renderFormations(); await persist({ table: 'reglages', op: 'upsert', row: { cle: OBJ_KEY, valeur: String(v), maj: nowIso(), maj_par: me.prenom } });
+});
+function funnelHtml(an) {
+  const calls = allCalls().filter(x => x.a && String(x.a.date || '').slice(0, 4) === String(an)), joints = calls.filter(x => /^Joint/.test(x.a.res || '')), rdv = calls.filter(x => x.a.res === 'Joint – intéressé (RDV)');
+  const dev = CLI.filter(r => /^Devis (envoyés|acceptés)/i.test(r.rubrique || '')).length, sig = FO.filter(f => f.statut !== 'Annulée' && fAn(f) === an).length;
+  const S = [['Appels passés', calls.length], ['Établissements joints', joints.length], ['Intéressés (rendez-vous)', rdv.length], ['Devis en cours', dev], ['Formations signées', sig]], mx = Math.max(1, ...S.map(s => s[1]));
+  return '<div class="funnel"><h3 style="margin:0">Du premier appel à la formation signée</h3>' + S.map(([l, v]) => '<div class="fn-r"><span class="small">' + l + '</span><div class="fn-b"><i style="width:' + Math.max(v ? 4 : 0, Math.round(v / mx * 100)) + '%"></i></div><b class="num">' + v + '</b></div>').join('') +
+    '<p class="small muted" style="margin:0">' + (calls.length ? Math.round(joints.length / calls.length * 100) + ' % des appels aboutissent à une personne, ' + Math.round(rdv.length / Math.max(1, joints.length) * 100) + ' % des personnes jointes sont intéressées. ' : '') + '« Devis en cours » = devis envoyés ou acceptés aujourd’hui ; « signées » = formations de ' + an + '.</p></div>';
+}
+
+// ----- photos de justificatifs gardées hors connexion
+let pjDbP = null;
+const pjDb = () => pjDbP || (pjDbP = new Promise((res, rej) => { const r = indexedDB.open('phoning-pj', 1); r.onupgradeneeded = () => r.result.createObjectStore('q', { keyPath: 'path' }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
+const pjTx = async (mode, fn) => { const db = await pjDb(); return new Promise((res, rej) => { const t = db.transaction('q', mode), q = fn(t.objectStore('q')); t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); };
+const pjPut = rec => pjTx('readwrite', s => s.put(rec)), pjGet = p => pjTx('readonly', s => s.get(p)), pjDel = p => pjTx('readwrite', s => s.delete(p));
+const pjCount = () => (ls.pjq || []).length;
+let pjBusy = false;
+async function pjFlush() {
+  if (pjBusy || !pjCount() || navigator.onLine === false) return; pjBusy = true; let n = 0;
+  try {
+    for (const path of (ls.pjq || []).slice()) {
+      let rec = null; try { rec = await pjGet(path); } catch (e) {}
+      if (rec) { let error = null; try { ({ error } = await sb.storage.from('justificatifs').upload(path, rec.blob, { upsert: true, contentType: rec.type })); } catch (e) { error = e; } if (error) break; if (rec.old) sb.storage.from('justificatifs').remove([rec.old]); n++; }
+      try { await pjDel(path); } catch (e) {}
+      ls.pjq = (ls.pjq || []).filter(p => p !== path); save();
+    }
+  } finally { pjBusy = false; syncChip(); }
+  if (n) toast(n > 1 ? n + ' justificatifs envoyés' : 'Justificatif envoyé');
+}
+addEventListener('online', pjFlush); setInterval(pjFlush, 20000); setTimeout(pjFlush, 3000);
+async function pjQueue(d, f2, path, old) {
+  try { await pjPut({ path, blob: f2, type: f2.type || 'application/octet-stream', old }); } catch (e) { toast('Pas de réseau : ajoutez le justificatif plus tard.'); return false; }
+  ls.pjq = (ls.pjq || []).filter(p => p !== path).concat([path]); save(); syncChip(); return true;
+}
+
 function fBlock(f) {
   const it = fItems(f.id), d = it.filter(i => i.fait).length, nx = fNext(f);
   return '<div class="panel"><div class="row" style="justify-content:space-between"><h2>' + esc(f.intitule) + '</h2><div class="row" style="gap:6px">' + lgChip(f) + '<span class="chip">' + esc(f.statut) + '</span></div></div><div class="muted">' + esc([f.client, fDates(f), f.lieu].filter(Boolean).join(' · ')) + (f.responsable ? ' · Responsable : ' + esc(f.responsable) : '') + '</div>' +
-    remLine(f) + '<div class="gauge" style="margin:10px 0"><i style="width:' + (it.length ? d / it.length * 100 : 0) + '%"></i></div><div class="row" style="justify-content:space-between"><span class="small">' + d + ' / ' + it.length + ' étapes' + (nx ? ' · <b>Prochaine :</b> ' + esc(nx.libelle) : it.length ? ' · tout est fait' : '') + (fDeps(f.id).length ? ' · Dépenses : <b>' + eur(fTotal(f.id)) + '</b>' : '') + (+f.prix ? ' · Reste à partager : <b>' + eur(gainCalc(f).reste) + '</b>' : '') + (fSolde(f) ? ' · <span class="chip ok">Soldée</span>' : '') + '</span><button data-fopen="' + esc(f.id) + '">Ouvrir</button></div></div>';
+    remLine(f) + payLine(f) + '<div class="gauge" style="margin:10px 0"><i style="width:' + (it.length ? d / it.length * 100 : 0) + '%"></i></div><div class="row" style="justify-content:space-between"><span class="small">' + d + ' / ' + it.length + ' étapes' + (nx ? ' · <b>Prochaine :</b> ' + esc(nx.libelle) : it.length ? ' · tout est fait' : '') + (fDeps(f.id).length ? ' · Dépenses : <b>' + eur(fTotal(f.id)) + '</b>' : '') + (+f.prix ? ' · Reste à partager : <b>' + eur(gainCalc(f).reste) + '</b>' : '') + (fSolde(f) ? ' · <span class="chip ok">Soldée</span>' : '') + '</span><button data-fopen="' + esc(f.id) + '">Ouvrir</button></div></div>';
 }
 function renderFormations() {
   $('fMissing').hidden = TRAVAIL_OK; $('fMain').hidden = !TRAVAIL_OK || !!fOpen; $('fCard').hidden = !fOpen; if (!TRAVAIL_OK || fOpen) return;
   const act = FO.filter(fActive).sort(fSort), fin = FO.filter(f => !fActive(f)).sort((a, b) => fSort(b, a));
-  $('fList').innerHTML = bilanHtml() + (act.map(fBlock).join('') || '<div class="panel muted">Aucune formation en cours. Ajoutez la première avec le bouton ci-dessus.</div>') + (fin.length ? '<details class="panel"><summary><b>Terminées ou annulées</b> <span class="muted small">' + fin.length + '</span></summary><div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">' + fin.map(fBlock).join('') + '</div></details>' : '');
+  $('fList').innerHTML = icsBarHtml() + bilanHtml() + (act.map(fBlock).join('') || '<div class="panel muted">Aucune formation en cours. Ajoutez la première avec le bouton ci-dessus.</div>') + (fin.length ? '<details class="panel"><summary><b>Terminées ou annulées</b> <span class="muted small">' + fin.length + '</span></summary><div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">' + fin.map(fBlock).join('') + '</div></details>' : '');
 }
 async function fCreate(o) {
   if (!o || o.target) o = {};
@@ -956,7 +1080,7 @@ function fCardRender() {
     '<div class="row"><label class="f">Dates (texte)<input id="f_dt" value="' + esc(f.dates_txt) + '" placeholder="ex. 26-27/11 + 14/12/2026"></label><label class="f">Premier jour<input type="date" id="f_d1" value="' + esc(dateOnly(f.date_debut)) + '"></label><label class="f">Dernier jour<input type="date" id="f_d2" value="' + esc(dateOnly(f.date_fin)) + '"></label></div>' +
     '<div class="row"><label class="f">Lieu<input id="f_lieu" value="' + esc(f.lieu) + '"></label><label class="f">Participants<input id="f_part" value="' + esc(f.participants) + '"></label></div>' +
     '<div class="row"><label class="f">Responsable<select id="f_resp"><option value="">—</option>' + pourOptions(f.responsable) + '</select></label><label class="f">Statut<select id="f_stat">' + FSTAT.map(x => '<option' + (x === f.statut ? ' selected' : '') + '>' + x + '</option>').join('') + '</select></label></div>' +
-    '<label class="f">Notes<textarea id="f_notes" rows="3">' + esc(f.notes) + '</textarea></label>' +
+    '<label class="f">Notes<textarea id="f_notes" rows="3">' + esc(f.notes) + '</textarea></label>' + fSuiviHtml(f) +
     '<div class="row" style="justify-content:space-between"><button id="f_del">Supprimer la formation</button><button class="primary" id="f_save">Enregistrer</button></div></div>' +
     '<div data-ft="etapes" class="ftab"><ul class="list" id="fItems"></ul>' +
     '<div class="row"><label class="f" style="flex:3 1 220px">Ajouter une étape<input id="f_new" autocomplete="off"></label><button id="f_addi">Ajouter</button></div></div>' +
@@ -973,6 +1097,7 @@ function fCardRender() {
   const lgSave = async msg => { f.logement_infos = $('f_lgi').value.trim(); f.logement_par = me.prenom; f.maj = nowIso(); $('f_lgc').innerHTML = lgChip(f); $('f_lgp').textContent = 'Mis à jour par ' + me.prenom; if (await persist({ table: 'formations', op: 'upsert', row: { ...f } }) && msg) toast(msg); };
   $('f_lgs').onclick = e => { const b = e.target.closest('[data-lg]'); if (!b) return; f.logement_statut = b.dataset.lg; $('f_lgs').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); lgSave(f.logement_statut === 'Réservé' ? 'Logement noté comme réservé' : 'Logement : ' + f.logement_statut.toLowerCase()); };
   $('f_lgi').onchange = () => lgSave('Infos du logement enregistrées');
+  fSuiviInit(f);
   $('f_save').onclick = async () => { const d1 = $('f_d1').value, d2 = $('f_d2').value; Object.assign(f, { intitule: $('f_int').value.trim() || f.intitule, client: $('f_cli').value.trim(), dates_txt: $('f_dt').value.trim(), date_debut: d1 || null, date_fin: d2 || null, lieu: $('f_lieu').value.trim(), participants: $('f_part').value.trim(), responsable: $('f_resp').value, statut: $('f_stat').value, notes: $('f_notes').value.trim(), logement_infos: $('f_lgi').value.trim(), maj: nowIso() }); if (await persist({ table: 'formations', op: 'upsert', row: { ...f } })) toast('Enregistré'); };
   $('f_del').onclick = async () => { if (!arm) { arm = true; $('f_del').textContent = 'Confirmer la suppression'; return; } FO = FO.filter(x => x.id !== f.id); FI = FI.filter(i => i.formation_id !== f.id); fOpen = null; renderFormations(); await persist({ table: 'formations', op: 'delete', key: 'id', val: f.id }); };
   $('f_addi').onclick = async () => { const l = $('f_new').value.trim(); if (!l) return; const it = { id: uid(), formation_id: f.id, libelle: l, ordre: Math.max(0, ...fItems(f.id).map(i => i.ordre)) + 1, fait: false, fait_le: null, fait_par: '' }; FI.push(it); $('f_new').value = ''; $('fItems').innerHTML = fItemsHtml(f); await persist({ table: 'formation_items', op: 'upsert', row: { ...it } }); };
