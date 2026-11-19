@@ -7,6 +7,10 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '
 const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 const TODAY = new Date(); const today = iso(TODAY);
 const fr = s => s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : '';
+const rel = d => { if (!d) return ''; const t = new Date(today + 'T12:00'), x = new Date(String(d).slice(0, 10) + 'T12:00'), n = Math.round((x - t) / 864e5);
+  if (isNaN(n)) return d; if (n === 0) return 'Aujourd’hui'; if (n === 1) return 'Demain'; if (n === -1) return 'Hier'; if (n < 0) return 'En retard de ' + (-n) + ' j';
+  if (n < 7) { const s = x.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric' }); return s[0].toUpperCase() + s.slice(1); }
+  return x.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }); };
 const addDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return iso(d); };
 const monday = (() => { const d = new Date(); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return iso(d); })();
 let ls = {}; try { ls = JSON.parse(localStorage.getItem('phoning2a') || '{}'); } catch (e) {}
@@ -255,17 +259,17 @@ function renderCard() { const z = $('cardZone'); const id = single || Q[qi]; if 
     (a.res ? '<div class="note small"><b>Appels précédents</b><br>' + fr(a.date) + ' : <b>' + esc(a.res) + '</b> (' + esc(nom(a.par)) + ')' + (a.pers ? ' · ' + esc(a.pers) : '') + (a.note ? ' – ' + esc(a.note) : '') + (a.hist || []).map(h => '<br>' + fr(h.date) + ' : ' + esc(h.res) + (h.note ? ' – ' + esc(h.note) : '')).join('') + '</div>' : '') +
     (c.tel ? '<div class="row"><span class="tel num" id="telTxt">' + esc(c.tel) + '</span></div>' +
     '<div class="row"><a class="btn call" href="tel:' + esc(c.tel.replace(/\s/g, '')) + '">Appeler</a><button id="cp">Copier le numéro</button></div>' : '<div class="note small">Pas de numéro pour cet établissement : cherchez-le (lien ci-dessous), notez-le, puis appelez.</div>') +
-    numBlock(c) +
-    '<details class="script" open><summary><b>Ce que je dis</b></summary>' + script(c) + '</details>' +
+    '<details class="script"' + (mineToday() < 3 ? ' open' : '') + '><summary><b>Ce que je dis</b></summary>' + script(c) + '</details>' +
     '<div><div class="eyebrow" style="margin-bottom:8px">Résultat de l’appel</div><div class="res" id="resBtns">' + L.map(([r, t], i) => '<button class="' + t + '" data-r="' + esc(r) + '"><span class="kb">' + (i + 1) + '</span>' + esc(r) + '</button>').join('') + '</div></div>' +
     '<div class="row" id="more">' +
       '<label class="f">Personne jointe<input id="fPers" autocomplete="off" placeholder="Nom, fonction"></label>' +
       '<label class="f" id="wDate" hidden>Date de rappel ou de rendez-vous<input type="date" id="fDate"></label>' +
       (c.k === 'S' ? '<label class="f" id="wMail" hidden>Adresse mail obtenue<input id="fMail" type="email" autocomplete="off"></label>' : '') +
       '<label class="f" style="flex-basis:100%">Mes notes pendant l’appel<textarea id="fNote" rows="4" placeholder="Qui j’ai eu, ce qui a été dit, la suite à donner…"></textarea></label>' +
-    '</div>' +
+    '</div>' + numBlock(c) +
     '<div class="row" style="justify-content:space-between"><div class="row">' + (undo ? '<button id="undo">Annuler le dernier</button>' : '') + '</div><div class="row">' + (single ? '<a class="btn" href="#accueil">Fermer</a>' : '<button id="skip">Passer</button>') + '<button class="primary" id="ok" disabled>Enregistrer et suivant</button></div></div>' +
     '</div>';
+  if (!single) window.scrollTo({ top: 0 });
   if (document.activeElement && !z.contains(document.activeElement) && /^(BUTTON|A)$/.test(document.activeElement.tagName)) document.activeElement.blur();
   let pick = null;
   try { const dn = (ls.drafts || {})[id]; if (dn) $('fNote').value = dn; } catch (e) {}
@@ -309,6 +313,30 @@ function nxFillSettings() {
 }
 function nxStart() { findMode = false; single = null; nxMode = true; Q = nxPool().map(c => c.id); qi = 0; $('nxPanel').hidden = true; $('nxBar').hidden = false; $('setupD').hidden = true; renderCard(); }
 function nxStop() { nxMode = false; Q = []; qi = 0; $('cardZone').innerHTML = ''; $('nxPanel').hidden = false; $('nxBar').hidden = true; $('setupD').hidden = false; nxInfo(); }
+
+// ---------- touche ludique : série de jours, célébrations
+function streak() {
+  const days = new Set();
+  allCalls().forEach(x => { if (isMine(x.a)) days.add(x.a.date); (x.a.hist || []).forEach(h => { if ((h.par || '').toLowerCase() === me.email) days.add(h.date); }); });
+  const d = new Date(today + 'T12:00'); if (!days.has(today)) d.setDate(d.getDate() - 1);
+  let n = 0; for (;;) { const s = d.toISOString().slice(0, 10); if (d.getDay() === 0 || d.getDay() === 6) { if (days.has(s)) n++; d.setDate(d.getDate() - 1); continue; } if (!days.has(s)) break; n++; d.setDate(d.getDate() - 1); if (n > 365) break; }
+  return n;
+}
+function celebrate(title, sub) {
+  const o = document.createElement('div'); o.className = 'party'; o.setAttribute('role', 'status');
+  const colors = ['#e08a1e', '#0f6b5c', '#ffd59a', '#1f8a4c', '#3fbfa6'];
+  o.innerHTML = '<div class="party-card"><b>' + esc(title) + '</b>' + (sub ? '<span>' + esc(sub) + '</span>' : '') + '</div>' +
+    (matchMedia('(prefers-reduced-motion: reduce)').matches ? '' : Array.from({ length: 26 }, (_, i) => '<i style="--x:' + (Math.cos(i / 26 * 6.283) * (90 + (i % 3) * 40)).toFixed(0) + 'px;--y:' + (Math.sin(i / 26 * 6.283) * (70 + (i % 4) * 30) - 40).toFixed(0) + 'px;--r:' + (i * 47 % 360) + 'deg;background:' + colors[i % 5] + '"></i>').join(''));
+  document.body.appendChild(o); o.addEventListener('click', () => o.remove()); setTimeout(() => o.remove(), 2400);
+}
+function cheer(res) {
+  const n = mineToday(), goal = +(ls.goal || 150);
+  setTimeout(() => {
+    if (res === 'Joint – intéressé (RDV)') celebrate('Rendez-vous décroché !', 'Bravo, c’est noté dans la fiche.');
+    else if (n === goal) celebrate('Objectif du jour atteint !', n + ' appels aujourd’hui.');
+    else if (n && n % 10 === 0) toast('Déjà ' + n + ' appels aujourd’hui, belle série');
+  }, 700);
+}
 function renderFind() { const z = $('cardZone'); const id = Q[qi];
   if (!id) { z.innerHTML = Q.length ? '<div class="card"><h2>Liste terminée</h2><p>Plus aucun numéro à chercher dans cette sélection.</p><div class="row"><a class="btn primary" href="#accueil">Revenir à l’accueil</a><button id="again">Nouvelle sélection</button></div></div>' : ''; const ag = $('again'); if (ag && nxMode) { ag.onclick = nxStop; } else if (ag) ag.onclick = () => { Q = []; findMode = false; renderCard(); poolInfo(); }; return; }
   const c = C[id];
@@ -329,7 +357,7 @@ async function record(c, res) { if (!res) return; const prev = A[c.id] ? JSON.pa
   $('ok').disabled = true;
   const r = await send({ table: 'appels', op: 'upsert', row: toRow(c.id, body) });
   if (r.error) { toast('Enregistrement impossible pour le moment : réessayez dans un instant.'); $('ok').disabled = false; return; }
-  A[c.id] = body; sess.n++; if (ls.passes && ls.passes[c.id]) { delete ls.passes[c.id]; save(); } undo = { id: c.id, prev }; toast(r.queued ? 'Hors connexion : appel gardé, envoi dès le retour du réseau' : 'Appel enregistré');
+  A[c.id] = body; sess.n++; cheer(body.res); if (ls.passes && ls.passes[c.id]) { delete ls.passes[c.id]; save(); } undo = { id: c.id, prev }; toast(r.queued ? 'Hors connexion : appel gardé, envoi dès le retour du réseau' : 'Appel enregistré');
   if (ls.drafts && ls.drafts[c.id]) { delete ls.drafts[c.id]; save(); }
   if (single) { single = null; location.hash = 'accueil'; return; }
   qi++; renderCard(); }
@@ -462,7 +490,7 @@ async function kRecord(c, res) { if (!res) return; const prev = KA[c.id] ? JSON.
   $('kOk').disabled = true;
   const r = await send({ table: 'campagne_appels', op: 'upsert', row: kToRow(c.id, body) });
   if (r.error) { toast('Enregistrement impossible pour le moment : réessayez dans un instant.'); $('kOk').disabled = false; return; }
-  KA[c.id] = body; kUndo = { id: c.id, prev }; toast(r.queued ? 'Hors connexion : appel gardé, envoi dès le retour du réseau' : 'Appel enregistré'); sess.n++;
+  KA[c.id] = body; cheer(body.res); kUndo = { id: c.id, prev }; toast(r.queued ? 'Hors connexion : appel gardé, envoi dès le retour du réseau' : 'Appel enregistré'); sess.n++;
   if (ls.kdrafts && ls.kdrafts[c.id]) { delete ls.kdrafts[c.id]; save(); }
   const pos = kQueue.indexOf(c.id);
   if (pos >= 0 && pos < kQueue.length - 1) kOpenCard(kQueue[pos + 1]); else { kOpen = null; renderCampagne(); } }
@@ -506,7 +534,7 @@ async function reloadTravail() { try { await loadTravail(); CLI = await fetchAll
 const incoming = () => TA.filter(t => !t.fait && t.pour === me.prenom);
 const unseen = () => TA.filter(t => (t.pour === me.prenom && t.de && t.de !== me.prenom && !t.vu) || (t.de === me.prenom && t.fait && t.fait_par !== me.prenom && t.retour_vu === false));
 function updateBadge() { const b = $('tBadge'); if (!b) return; const n = TRAVAIL_OK ? unseen().length : 0; b.hidden = !n; b.textContent = n; }
-function dueChip(d) { if (!d) return ''; const cl = d < today ? 'late' : d === today ? 'soon' : ''; return '<span class="chip ' + cl + '">' + (d < today ? 'En retard · ' : '') + fr(d) + '</span>'; }
+function dueChip(d) { if (!d) return ''; const cl = d < today ? 'late' : d === today ? 'soon' : ''; return '<span class="chip ' + cl + '">' + rel(d) + '</span>'; }
 function seg(id, items, cur) { $(id).innerHTML = items.map(([v, l, n]) => '<button data-f="' + v + '" aria-pressed="' + (v === cur) + '">' + esc(l) + (n != null ? ' <span class="num">' + n + '</span>' : '') + '</button>').join(''); }
 const pourOptions = sel => Object.values(MEMBRES).map(p => '<option value="' + esc(p) + '"' + (p === sel ? ' selected' : '') + '>' + esc(p === me.prenom ? p + ' (moi)' : p) + '</option>').join('');
 async function persist(job, onFail) { const r = await send(job); if (r.error) { toast('Enregistrement impossible pour le moment : réessayez.'); if (onFail) onFail(); return false; } if (r.queued) toast('Hors connexion : gardé, envoi dès le retour du réseau'); return true; }
@@ -572,8 +600,8 @@ const rubriques = () => { const o = []; CLI.slice().sort((a, b) => a.ordre - b.o
 const ordreFor = rub => rub === ARCH ? 900 + CLI.filter(r => r.rubrique === ARCH).length : (() => { const s = CLI.filter(r => r.rubrique === rub); return s.length ? Math.max(...s.map(x => x.ordre)) + 1 : Math.max(0, ...CLI.filter(r => r.rubrique !== ARCH).map(x => x.ordre)) + 100; })();
 function cItem(r) {
   const q = dateOnly(r.quand);
-  return '<li><div><b>' + esc(r.structure) + '</b>' + (r.ou_on_en_est ? '<div class="small" style="white-space:pre-wrap">' + esc(r.ou_on_en_est) + '</div>' : '') + (r.prochaine_action ? '<div class="small" style="white-space:pre-wrap"><b>À faire :</b> ' + esc(r.prochaine_action) + '</div>' : '') +
-    '<div class="muted small">' + esc([r.qui, r.contact].filter(Boolean).join(' · ')) + (r.maj_par ? ' · mis à jour par ' + esc(r.maj_par) + (r.maj ? ' le ' + fr(String(r.maj).slice(0, 10)) : '') : '') + '</div></div>' +
+  return '<li class="cli"><div><b class="cli-n">' + esc(r.structure) + '</b>' + (r.prochaine_action ? '<div class="pa"><span class="pa-q">' + esc(r.qui || 'À faire') + '</span>' + esc(r.prochaine_action) + '</div>' : '') + (r.ou_on_en_est ? '<div class="small muted" style="white-space:pre-wrap">' + esc(r.ou_on_en_est) + '</div>' : '') +
+    '<div class="muted small">' + esc(r.contact || '') + (r.maj_par ? ' · mis à jour par ' + esc(r.maj_par) + (r.maj ? ', ' + rel(String(r.maj).slice(0, 10)).toLowerCase() : '') : '') + '</div></div>' +
     (q ? dueChip(q) : r.quand ? '<span class="chip">' + esc(r.quand) + '</span>' : '') + (TRAVAIL_OK ? '<button data-treq="' + esc(r.structure) + '">Demande</button>' : '') + (CLI_EDIT ? '<button data-copen="' + r.id + '">Modifier</button>' : '') + '</li>';
 }
 function renderClients() {
@@ -679,18 +707,21 @@ function renderMonJour() {
   updateBadge();
   const calls = allCalls(), goal = +(ls.goal || 150), mine = calls.filter(x => x.a.date === today && isMine(x.a)).length;
   const reste = ALL.filter(toCall).length + (CAMP_OK ? KL.filter(c => kCible(c) && !kDone(c) && kTel(c)).length : 0);
-  $('mjCallN').textContent = reste; $('mjCallS').textContent = 'à appeler · ' + mine + ' appel' + (mine > 1 ? 's' : '') + ' aujourd’hui sur ' + goal;
+  $('mjCallN').textContent = reste; $('mjCallS').textContent = 'à appeler';
+  $('mjGauge').style.width = Math.min(100, mine / goal * 100) + '%';
+  $('mjGoal').textContent = mine >= goal ? 'Objectif du jour atteint, bravo !' : mine ? mine + ' sur ' + goal + ' aujourd’hui · encore ' + (goal - mine) : 'Objectif du jour : ' + goal + ' appels';
+  const sk = streak(); $('mjStreak').hidden = sk < 2; $('mjStreak').textContent = sk + ' jours d’appels d’affilée';
   const mt = TRAVAIL_OK ? incoming() : [], late = mt.filter(t => dateOnly(t.echeance) && dateOnly(t.echeance) < today).length, nw = TRAVAIL_OK ? unseen().length : 0;
-  $('mjTaskN').textContent = TRAVAIL_OK ? mt.length : '–'; $('mjTaskS').textContent = !TRAVAIL_OK ? 'bientôt disponible' : nw ? nw + ' nouvelle' + (nw > 1 ? 's' : '') + ' demande' + (nw > 1 ? 's' : '') : late ? 'à faire · ' + late + ' en retard' : 'à faire';
+  $('mjTaskN').textContent = TRAVAIL_OK ? mt.length : '–'; $('mjTaskS').textContent = !TRAVAIL_OK ? 'bientôt disponible' : nw ? nw + ' nouvelle' + (nw > 1 ? 's' : '') + ' demande' + (nw > 1 ? 's' : '') : late ? 'à faire · ' + late + ' en retard' : mt.length ? 'à faire' : 'Rien à faire, bravo';
   $('mjTaskCard').classList.toggle('hot', nw > 0);
   const ca = CLI.filter(r => r.rubrique !== ARCH && isMe(r.qui)), cl = ca.filter(r => dateOnly(r.quand) && dateOnly(r.quand) <= today).length;
-  $('mjCliN').textContent = ca.length; $('mjCliS').textContent = cl ? 'actions pour moi · ' + cl + ' à faire maintenant' : 'actions pour moi';
+  $('mjCliN').textContent = ca.length; $('mjCliS').textContent = !ca.length ? 'Aucune action pour moi' : cl ? 'actions pour moi · ' + cl + ' à faire maintenant' : 'actions pour moi';
   const items = [];
-  if (TRAVAIL_OK) unseen().filter(t => t.pour === me.prenom).forEach(t => items.push('<li><div><b>Nouvelle demande de ' + esc(t.de) + '</b><div class="small">' + esc(t.titre) + (t.detail ? ' · ' + esc(t.detail.slice(0, 80)) : '') + '</div></div>' + dueChip(dateOnly(t.echeance)) + '<a class="btn primary" href="#taches">Voir</a></li>'));
+  if (TRAVAIL_OK) unseen().filter(t => t.pour === me.prenom).forEach(t => items.push('<li class="go new" data-href="#taches"><div><b>Nouvelle demande de ' + esc(t.de) + '</b><div class="small">' + esc(t.titre) + (t.detail ? ' · ' + esc(t.detail.slice(0, 80)) : '') + '</div></div>' + dueChip(dateOnly(t.echeance)) + '<span class="chev" aria-hidden="true">›</span></li>'));
   if (TRAVAIL_OK) mt.filter(t => !unseen().includes(t) && dateOnly(t.echeance) && dateOnly(t.echeance) <= today).forEach(t => items.push('<li><button class="chk" data-tdone="' + esc(t.id) + '" aria-label="Marquer comme fait"></button><div><b>' + esc(t.titre) + '</b><div class="muted small">De ' + esc(t.de || '') + '</div></div>' + dueChip(dateOnly(t.echeance)) + '</li>'));
-  calls.filter(x => x.a.rappel && x.a.rappel <= today).forEach(x => items.push('<li><div><b>Rappeler ' + esc(x.nom) + '</b><div class="muted small">' + esc(depTxt(x.dep)) + '</div></div><span class="chip ' + (x.a.rappel < today ? 'late' : 'soon') + '">' + fr(x.a.rappel) + '</span>' + openBtn(x).replace('Ouvrir la fiche', 'Fiche') + '</li>'));
-  ca.filter(r => dateOnly(r.quand) && dateOnly(r.quand) <= today).forEach(r => items.push('<li><div><b>' + esc(r.structure) + '</b><div class="small">' + esc(r.prochaine_action || r.ou_on_en_est) + '</div></div>' + dueChip(dateOnly(r.quand)) + '<a class="btn" href="#clients">Clients</a></li>'));
-  $('mjList').innerHTML = items.slice(0, 8).join('') + (items.length > 8 ? '<li class="muted small">Et ' + (items.length - 8) + ' autres.</li>' : '') || '<li class="muted">Rien d’urgent aujourd’hui.</li>';
+  calls.filter(x => x.a.rappel && x.a.rappel <= today).forEach(x => items.push('<li class="go" ' + (x.src === 'K' ? 'data-kopen' : 'data-open') + '="' + esc(x.id) + '"><div><b>Rappeler ' + esc(x.nom) + '</b><div class="muted small">' + esc(depLabel(x.c)) + (x.a.pers ? ' · ' + esc(x.a.pers) : '') + '</div></div>' + dueChip(x.a.rappel) + '<span class="chev" aria-hidden="true">›</span></li>'));
+  ca.filter(r => dateOnly(r.quand) && dateOnly(r.quand) <= today).forEach(r => items.push('<li class="go" data-href="#clients"><div><b>' + esc(r.structure) + '</b><div class="small">' + esc(r.prochaine_action || r.ou_on_en_est) + '</div></div>' + dueChip(dateOnly(r.quand)) + '<span class="chev" aria-hidden="true">›</span></li>'));
+  $('mjList').innerHTML = items.slice(0, 8).join('') + (items.length > 8 ? '<li class="muted small">Et ' + (items.length - 8) + ' autres.</li>' : '') || '<li class="muted">Rien d’urgent aujourd’hui : c’est le bon moment pour appeler.</li>';
   const nf = TRAVAIL_OK ? FO.filter(f => fActive(f) && (!f.date_fin || f.date_fin >= today) && !(f.date_debut && f.date_debut < today && !f.date_fin)).sort(fSort)[0] : null;
   $('mjNotif').hidden = !(pushState === 'off' || pushState === 'ios'); $('mjFormP').hidden = !TRAVAIL_OK;
   $('mjForm').innerHTML = nf ? '<div class="row" style="justify-content:space-between"><div><b>' + esc(nf.intitule) + '</b><div class="muted small">' + esc([nf.client, fDates(nf)].filter(Boolean).join(' · ')) + '</div>' + (fNext(nf) ? '<div class="small" style="margin-top:6px"><b>Prochaine étape :</b> ' + esc(fNext(nf).libelle) + '</div>' : '') + '</div><button data-fopen="' + esc(nf.id) + '">Ouvrir</button></div>' : '<span class="muted">Aucune formation à venir enregistrée.</span>';
@@ -795,5 +826,7 @@ function initViews() { if (viewsReady) return; viewsReady = true;
   $('nxSet').addEventListener('click', () => { $('nxPanel').hidden = false; $('nxBar').hidden = true; $('nxCfg').open = true; });
   ['nxDep', 'nxOrdre', 'nxList'].forEach(id => $(id).addEventListener('change', () => { ls[id] = $(id).value; save(); nxInfo(); if (nxMode) { Q = nxPool().map(c => c.id); qi = 0; renderCard(); } }));
   $('nxReset').addEventListener('click', () => { ls.passes = {}; save(); nxInfo(); toast('Les établissements passés reprennent leur place'); });
+  document.addEventListener('click', e => { const g = e.target.closest('[data-href]'); if (g) location.hash = g.dataset.href.slice(1); });
+  geoReady.then(() => refreshCurrent());
   initTravail(); pushRefresh().then(() => { if (curView() === 'accueil') renderMonJour(); }); }
 })();
