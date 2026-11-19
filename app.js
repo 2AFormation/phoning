@@ -161,7 +161,7 @@ function route() {
   updateBadge(); window.scrollTo(0, 0);
 }
 addEventListener('hashchange', () => { if (!recovering) route(); });
-function refreshCurrent() { const v = curView(); updateBadge(); if (v === 'accueil') renderMonJour(); if (v === 'bilan') renderBilan(); if (v === 'carte') drawMap(); if (v === 'seance' && !Q.length) poolInfo(); if (v === 'campagne' && !kOpen) renderCampagne(); if (v === 'taches' && !tOpen) renderTaches(); if (v === 'clients' && cOpen === null) renderClients(); if (v === 'formations' && !fOpen) renderFormations(); if (v === 'notes') renderNotes(); }
+function refreshCurrent() { const v = curView(); updateBadge(); if (v === 'accueil') renderMonJour(); if (v === 'bilan') renderBilan(); if (v === 'carte') drawMap(); if (v === 'seance' && !Q.length) { poolInfo(); nxInfo(); } if (v === 'campagne' && !kOpen) renderCampagne(); if (v === 'taches' && !tOpen) renderTaches(); if (v === 'clients' && cOpen === null) renderClients(); if (v === 'formations' && !fOpen) renderFormations(); if (v === 'notes') renderNotes(); }
 
 // ---------- accueil
 const sess = { n: 0 };
@@ -245,11 +245,11 @@ function script(c) { const nm = me.prenom ? me.prenom + (me.prenom === 'Antoine'
   if (c.k === 'R') return '<p>« Bonjour, ' + esc(nm) + ', de 2A Formation, organisme de formation du travail social certifié Qualiopi. ' + (c.env ? 'Je vous ai envoyé le ' + fr(c.env) + ' un mail ' : 'Je vous ai envoyé un mail ') + (c.qui ? 'à l’attention de ' + esc(c.qui) + ' ' : '') + 'au sujet de nos formations en intra pour les équipes. Pourriez-vous me passer la personne qui s’occupe du plan de formation ? »</p><p>Avec la bonne personne : « Nous sommes éducateurs spécialisés et nous construisons chaque formation avec l’équipe, à partir de ses besoins. Puis-je vous renvoyer notre catalogue et convenir d’un court échange ? »</p>' + fin;
   return '<p>« Bonjour, ' + esc(nm) + ', de 2A Formation, organisme de formation du travail social certifié Qualiopi. Nous proposons des formations en intra pour les équipes éducatives et je souhaiterais en adresser la présentation à la direction' + (c.type ? ' de votre ' + esc(c.type.toLowerCase()) : '') + '. À quelle adresse mail puis-je l’envoyer ? »</p><p>Si on vous la donne : notez-la (bien épelée) dans le champ prévu. Alexandre préparera le mail.</p>' + fin; }
 function renderCard() { const z = $('cardZone'); const id = single || Q[qi]; if (findMode && !single) return renderFind();
-  if (!id) { z.innerHTML = Q.length ? '<div class="card"><h2>Séance terminée</h2><p>' + mineToday() + ' appel' + (mineToday() > 1 ? 's' : '') + ' noté' + (mineToday() > 1 ? 's' : '') + ' aujourd’hui. Merci !</p><div class="row"><a class="btn primary" href="#accueil">Revenir à l’accueil</a><button id="again">Nouvelle sélection</button></div></div>' : ''; const ag = $('again'); if (ag) ag.onclick = () => { Q = []; renderCard(); poolInfo(); }; return; }
+  if (!id) { z.innerHTML = Q.length ? '<div class="card"><h2>' + (nxMode ? 'Plus personne à appeler' : 'Séance terminée') + '</h2><p>' + mineToday() + ' appel' + (mineToday() > 1 ? 's' : '') + ' noté' + (mineToday() > 1 ? 's' : '') + ' aujourd’hui. Merci !</p><div class="row"><a class="btn primary" href="#accueil">Revenir à l’accueil</a><button id="again">Nouvelle sélection</button></div></div>' : ''; const ag = $('again'); if (ag && nxMode) { ag.onclick = nxStop; } else if (ag) ag.onclick = () => { Q = []; renderCard(); poolInfo(); }; return; }
   const c = C[id]; const a = A[id] || {}; const L = RES[c.k];
   z.innerHTML = '<div class="card">' +
     '<div class="row" style="justify-content:space-between"><span class="kind">' + (c.k === 'R' ? 'Relance après mail' : 'Sans adresse mail') + '</span><span class="muted small num">' + (single ? 'Fiche ouverte depuis l’accueil' : 'Appel ' + (qi + 1) + ' sur ' + Q.length) + '</span></div>' +
-    '<div><h2>' + esc(c.nom) + '</h2><div class="muted">' + esc(depLabel(c)) + (c.k === 'S' && c.gest ? ' · ' + esc(c.gest) : '') + '</div></div>' +
+    '<div><h2>' + esc(c.nom) + '</h2><div class="muted">' + esc(depLabel(c)) + (c.k === 'S' && c.gest ? ' · ' + esc(c.gest) : '') + '</div>' + (nxMode && !single && nxSet().dep ? '<span class="chip" style="margin-top:6px;display:inline-block">' + (c.dep === nxSet().dep ? 'Dans votre département' : '≈ ' + km(nxSet().dep, c.dep) + ' km') + '</span>' : '') + (nxMode && (ls.passes || {})[c.id] ? ' <span class="chip soon">Déjà passé une fois</span>' : '') + '</div>' +
     (c.qui ? '<div><span class="eyebrow">Mail adressé à</span><div>' + esc(c.qui) + '</div></div>' : '') +
     (c.ech ? '<div class="note small">L’adresse mail de cet établissement est en échec : demandez la bonne adresse pendant l’appel.</div>' : '') +
     (a.res ? '<div class="note small"><b>Appels précédents</b><br>' + fr(a.date) + ' : <b>' + esc(a.res) + '</b> (' + esc(nom(a.par)) + ')' + (a.pers ? ' · ' + esc(a.pers) : '') + (a.note ? ' – ' + esc(a.note) : '') + (a.hist || []).map(h => '<br>' + fr(h.date) + ' : ' + esc(h.res) + (h.note ? ' – ' + esc(h.note) : '')).join('') + '</div>' : '') +
@@ -276,7 +276,7 @@ function renderCard() { const z = $('cardZone'); const id = single || Q[qi]; if 
     const nd = NEEDDATE.includes(pick); $('wDate').hidden = !nd; if (nd && !$('fDate').value) $('fDate').value = addDays(pick === 'Joint – à rappeler' ? 7 : 3);
     if ($('wMail')) $('wMail').hidden = pick !== 'Adresse mail obtenue'; $('ok').disabled = false; };
   const ns = $('nSave'); if (ns) ns.onclick = async () => { if (await saveNum(c, $('nTel').value, false)) renderCard(); };
-  const sk = $('skip'); if (sk) sk.onclick = () => { qi++; renderCard(); };
+  const sk = $('skip'); if (sk) sk.onclick = () => { if (nxMode) { ls.passes = ls.passes || {}; ls.passes[id] = Date.now(); save(); Q.push(Q.splice(qi, 1)[0]); if (Q.length === 1) toast('C’est le dernier établissement de la liste'); } else qi++; renderCard(); };
   const un = $('undo'); if (un) un.onclick = doUndo;
   $('ok').onclick = () => record(c, pick);
 }
@@ -284,8 +284,33 @@ function numBlock(c) {
   if (!NUM_OK) return c.tel ? '' : '<p class="muted small">L’enregistrement des numéros n’est pas encore activé (Alexandre doit lancer 05_ameliorations.sql dans Supabase).</p>';
   return '<details class="script"' + (c.tel ? '' : ' open') + '><summary><b>' + (c.tel ? 'Corriger le numéro' : 'Ajouter le numéro') + '</b></summary><div class="row" style="margin-top:8px;align-items:flex-end"><label class="f">Numéro<input id="nTel" type="tel" autocomplete="off" value="' + esc(c.tel) + '"></label><button id="nSave">Enregistrer le numéro</button><a class="btn" target="_blank" rel="noopener" href="' + esc(searchUrl(c)) + '">Chercher sur le web</a></div></details>';
 }
+
+// ---------- appel suivant : un seul bouton, le plus proche d'abord
+let nxMode = false;
+const km = (a, b) => { const A = CEN[a], B = CEN[b]; if (!A || !B) return 9999; const R = 6371, r = Math.PI / 180, dLa = (B[1] - A[1]) * r, dLo = (B[0] - A[0]) * r; const h = Math.sin(dLa / 2) ** 2 + Math.cos(A[1] * r) * Math.cos(B[1] * r) * Math.sin(dLo / 2) ** 2; return Math.round(2 * R * Math.asin(Math.sqrt(h))); };
+const nxSet = () => ({ dep: ls.nxDep || '', ordre: ls.nxOrdre || 'proche', list: ls.nxList || 'RS' });
+function nxPool() {
+  const s = nxSet(), pas = ls.passes || {};
+  const p = ALL.filter(c => s.list.includes(c.k) && toCall(c));
+  const d = {}; p.forEach(c => { if (!(c.dep in d)) d[c.dep] = s.dep ? km(s.dep, c.dep) : 0; });
+  return p.sort((a, b) => (pas[a.id] || 0) - (pas[b.id] || 0) ||
+    (s.ordre === 'ancien' ? (a.env || '9').localeCompare(b.env || '9') || d[a.dep] - d[b.dep] : d[a.dep] - d[b.dep] || (a.env || '9').localeCompare(b.env || '9')) ||
+    (a.ville || '').localeCompare(b.ville || '', 'fr') || a.nom.localeCompare(b.nom, 'fr'));
+}
+function nxInfo() {
+  const s = nxSet(), n = ALL.filter(c => s.list.includes(c.k) && toCall(c)).length, pas = Object.keys(ls.passes || {}).filter(id => C[id] && toCall(C[id])).length;
+  $('nxN').textContent = n; $('nxS').textContent = 'à appeler' + (s.dep ? ' · en partant du ' + depTxt(s.dep) : '') + (pas ? ' · ' + pas + ' passé' + (pas > 1 ? 's' : '') + ' (en fin de liste)' : '');
+  if (!s.dep) $('nxS').textContent += ' · choisissez votre département dans les réglages';
+}
+function nxFillSettings() {
+  const deps = [...new Set(ALL.map(c => c.dep))].filter(Boolean).sort();
+  $('nxDep').innerHTML = '<option value="">—</option>' + deps.map(d => '<option value="' + d + '">' + esc(depTxt(d)) + '</option>').join('');
+  const s = nxSet(); $('nxDep').value = s.dep; $('nxOrdre').value = s.ordre; $('nxList').value = s.list;
+}
+function nxStart() { findMode = false; single = null; nxMode = true; Q = nxPool().map(c => c.id); qi = 0; $('nxPanel').hidden = true; $('nxBar').hidden = false; $('setupD').hidden = true; renderCard(); }
+function nxStop() { nxMode = false; Q = []; qi = 0; $('cardZone').innerHTML = ''; $('nxPanel').hidden = false; $('nxBar').hidden = true; $('setupD').hidden = false; nxInfo(); }
 function renderFind() { const z = $('cardZone'); const id = Q[qi];
-  if (!id) { z.innerHTML = Q.length ? '<div class="card"><h2>Liste terminée</h2><p>Plus aucun numéro à chercher dans cette sélection.</p><div class="row"><a class="btn primary" href="#accueil">Revenir à l’accueil</a><button id="again">Nouvelle sélection</button></div></div>' : ''; const ag = $('again'); if (ag) ag.onclick = () => { Q = []; findMode = false; renderCard(); poolInfo(); }; return; }
+  if (!id) { z.innerHTML = Q.length ? '<div class="card"><h2>Liste terminée</h2><p>Plus aucun numéro à chercher dans cette sélection.</p><div class="row"><a class="btn primary" href="#accueil">Revenir à l’accueil</a><button id="again">Nouvelle sélection</button></div></div>' : ''; const ag = $('again'); if (ag && nxMode) { ag.onclick = nxStop; } else if (ag) ag.onclick = () => { Q = []; findMode = false; renderCard(); poolInfo(); }; return; }
   const c = C[id];
   z.innerHTML = '<div class="card"><div class="row" style="justify-content:space-between"><span class="kind">Numéro à chercher</span><span class="muted small num">' + (qi + 1) + ' sur ' + Q.length + '</span></div>' +
     '<div><h2>' + esc(c.nom) + '</h2><div class="muted">' + esc(depLabel(c)) + '</div></div>' +
@@ -304,7 +329,7 @@ async function record(c, res) { if (!res) return; const prev = A[c.id] ? JSON.pa
   $('ok').disabled = true;
   const r = await send({ table: 'appels', op: 'upsert', row: toRow(c.id, body) });
   if (r.error) { toast('Enregistrement impossible pour le moment : réessayez dans un instant.'); $('ok').disabled = false; return; }
-  A[c.id] = body; sess.n++; undo = { id: c.id, prev }; toast(r.queued ? 'Hors connexion : appel gardé, envoi dès le retour du réseau' : 'Appel enregistré');
+  A[c.id] = body; sess.n++; if (ls.passes && ls.passes[c.id]) { delete ls.passes[c.id]; save(); } undo = { id: c.id, prev }; toast(r.queued ? 'Hors connexion : appel gardé, envoi dès le retour du réseau' : 'Appel enregistré');
   if (ls.drafts && ls.drafts[c.id]) { delete ls.drafts[c.id]; save(); }
   if (single) { single = null; location.hash = 'accueil'; return; }
   qi++; renderCard(); }
@@ -325,10 +350,11 @@ const IDF = ['75', '77', '78', '91', '92', '93', '94', '95'], IB = { x: 20, y: 6
 (function () { const b = IB.b, kk = Math.cos(48.7 * Math.PI / 180), w = (b[2] - b[0]) * kk, h = b[3] - b[1], s = (IB.w - 20) / Math.max(w, h); IB.f = (lon, lat) => [IB.x + 10 + (IB.w - 20 - w * s) / 2 + (lon - b[0]) * kk * s, IB.y + 24 + (IB.h - 30 - h * s) / 2 + (b[3] - lat) * s]; })();
 const proj = (d, lon, lat) => DOM[d] ? DOM[d].f(lon, lat) : pm(lon, lat);
 const NS = 'http://www.w3.org/2000/svg', el = (t, a) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); return e; };
-const GP = {}, GP2 = {};
+const GP = {}, GP2 = {}, CEN = {};
 function parseGeo(g) { g.split('\n').forEach(line => { if (!line) return; const [c, n, m, r] = line.split('|'); NAMES[c] = n; const mult = +m; let d = '', d2 = ''; const zi = IDF.includes(c);
-  r.split(';').forEach(ring => { let X = 0, Y = 0; ring.split(' ').forEach((pr, i) => { const [a, b] = pr.split(',').map(Number); X += a; Y += b; const [px, py] = proj(c, X / mult, Y / mult); d += (i ? 'L' : 'M') + px.toFixed(1) + ',' + py.toFixed(1); if (zi) { const [qx, qy] = IB.f(X / mult, Y / mult); d2 += (i ? 'L' : 'M') + qx.toFixed(1) + ',' + qy.toFixed(1); } }); d += 'Z'; if (zi) d2 += 'Z'; });
-  GP[c] = d; if (zi) GP2[c] = d2; }); }
+  let sx = 0, sy = 0, sn = 0;
+  r.split(';').forEach(ring => { let X = 0, Y = 0; ring.split(' ').forEach((pr, i) => { const [a, b] = pr.split(',').map(Number); X += a; Y += b; sx += X / mult; sy += Y / mult; sn++; const [px, py] = proj(c, X / mult, Y / mult); d += (i ? 'L' : 'M') + px.toFixed(1) + ',' + py.toFixed(1); if (zi) { const [qx, qy] = IB.f(X / mult, Y / mult); d2 += (i ? 'L' : 'M') + qx.toFixed(1) + ',' + qy.toFixed(1); } }); d += 'Z'; if (zi) d2 += 'Z'; });
+  GP[c] = d; if (zi) GP2[c] = d2; if (sn) CEN[c] = [sx / sn, sy / sn]; }); }
 const geoReady = fetch('departements.txt').then(r => r.text()).then(t => { GEO = t; parseGeo(t); }).catch(() => {});
 const STEPS = ['var(--land-0)', 'color-mix(in srgb, var(--accent) 25%, var(--land))', 'color-mix(in srgb, var(--accent) 50%, var(--land))', 'color-mix(in srgb, var(--accent) 75%, var(--land))', 'var(--accent)'];
 ['l1', 'l2', 'l3', 'l4'].forEach((id, i) => $(id).style.background = STEPS[i + 1]);
@@ -725,5 +751,11 @@ function initViews() { if (viewsReady) return; viewsReady = true;
     if (e.key === 'Enter' && (typing ? e.ctrlKey : (!onBtn || res.contains(t))) && ok && !ok.disabled) { e.preventDefault(); ok.click(); return; }
     if (!typing && !e.ctrlKey && /^[1-9]$/.test(e.key)) { const b = res.querySelectorAll('button')[+e.key - 1]; if (b) b.click(); }
   });
+  geoReady.then(() => { nxFillSettings(); nxInfo(); });
+  $('nxGo').addEventListener('click', () => geoReady.then(nxStart));
+  $('nxStop').addEventListener('click', nxStop);
+  $('nxSet').addEventListener('click', () => { $('nxPanel').hidden = false; $('nxBar').hidden = true; $('nxCfg').open = true; });
+  ['nxDep', 'nxOrdre', 'nxList'].forEach(id => $(id).addEventListener('change', () => { ls[id] = $(id).value; save(); nxInfo(); if (nxMode) { Q = nxPool().map(c => c.id); qi = 0; renderCard(); } }));
+  $('nxReset').addEventListener('click', () => { ls.passes = {}; save(); nxInfo(); toast('Les établissements passés reprennent leur place'); });
   initTravail(); }
 })();
