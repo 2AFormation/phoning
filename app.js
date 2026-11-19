@@ -659,7 +659,10 @@ let DE = [], DEP_OK = false, fTab = 'infos', depArm = null;
 const DCAT = ['Logement', 'Transport', 'Repas', 'Matériel', 'Autre'];
 const eur = n => (Math.round((+n || 0) * 100) / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
 async function loadDepenses() { try { DE = await fetchAll('formation_depenses', 'cree_le'); DEP_OK = true; } catch (e) { DEP_OK = false; } }
-const fDeps = id => DE.filter(d => d.formation_id === id);
+const REC = 'Covoiturage';
+const fDeps = id => DE.filter(d => d.formation_id === id && d.categorie !== REC);
+const fRecs = id => DE.filter(d => d.formation_id === id && d.categorie === REC);
+const fRecTotal = id => fRecs(id).reduce((s, d) => s + (+d.montant || 0), 0);
 const fTotal = id => fDeps(id).reduce((s, d) => s + (+d.montant || 0), 0);
 function fTabsHtml(f) {
   const it = fItems(f.id), d = it.filter(i => i.fait).length, n = fDeps(f.id).length;
@@ -718,7 +721,14 @@ function renderDepenses(f) {
     '<div class="row" style="align-items:flex-end"><label class="f">Date<input id="depDate" type="date" value="' + today + '"></label><label class="f">Payé par<select id="depPar">' + pourOptions(me.prenom) + '<option value="2A Formation">2A Formation (carte pro)</option></select></label></div>' +
     '<label class="f">Justificatif (photo ou PDF)<input id="depFile" type="file" accept="image/*,application/pdf"></label>' +
     '<div class="row" style="justify-content:flex-end"><button class="primary" type="submit" id="depOk">Ajouter la dépense</button></div></form>' +
-    '<div id="depZone">' + depListHtml(f) + '</div>';
+    '<div id="depZone">' + depListHtml(f) + '</div>' +
+    '<div class="rec"><div class="row" style="justify-content:space-between;align-items:baseline"><h3>Recettes covoiturage</h3><span class="muted small">font baisser les frais de déplacement</span></div>' +
+    '<form id="recAdd"><div class="row" style="align-items:flex-end"><label class="f" style="flex:1 1 100px">Montant (€)<input id="recMt" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"></label>' +
+    '<label class="f" style="flex:1 1 120px">Encaissé par<select id="recPar">' + ASSOC.map(p => '<option' + (p === me.prenom ? ' selected' : '') + '>' + p + '</option>').join('') + '</select></label>' +
+    '<label class="f" style="flex:1 1 130px">Date<input id="recDate" type="date" value="' + today + '"></label></div>' +
+    '<div class="row" style="align-items:flex-end"><label class="f" style="flex:2 1 180px">Trajet (facultatif)<input id="recLib" autocomplete="off" placeholder="ex. aller, 2 passagers"></label>' +
+    '<button class="primary" type="submit" id="recOk">Ajouter</button></div></form>' +
+    '<div id="recZone">' + recListHtml(f) + '</div></div>';
   z.onchange = e => { if (/^g_/.test(e.target.id || '')) gainSave(f, e.target.id, e.target.value); };
   let cat = DCAT[0];
   $('depCat').onclick = e => { const b = e.target.closest('[data-c]'); if (!b) return; cat = b.dataset.c; $('depCat').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); };
@@ -738,6 +748,21 @@ function renderDepenses(f) {
     if (o) openJustif(o.dataset.jopen);
     if (x) { const id = x.dataset.ddel; if (depArm !== id) { depArm = id; $('depZone').innerHTML = depListHtml(f); return; } depArm = null; const d = DE.find(y => y.id === id); DE = DE.filter(y => y.id !== id); $('depZone').innerHTML = depListHtml(f); fTabsRefresh(f); if (d && d.justif_path) sb.storage.from('justificatifs').remove([d.justif_path]); await persist({ table: 'formation_depenses', op: 'delete', key: 'id', val: id }); }
   };
+  $('recAdd').onsubmit = async e => {
+    e.preventDefault(); const mt = parseFloat(String($('recMt').value).replace(/\s/g, '').replace(',', '.').replace(/[^0-9.]/g, ''));
+    if (!(mt > 0)) { toast('Indiquez le montant encaissé.'); return; }
+    $('recOk').disabled = true;
+    const d = { id: uid(), formation_id: f.id, date: $('recDate').value || today, categorie: REC, libelle: $('recLib').value.trim(), montant: Math.round(mt * 100) / 100, paye_par: $('recPar').value, justif_path: '', justif_nom: '', cree_par: me.prenom, cree_le: nowIso() };
+    DE.push(d); const ok = await persist({ table: 'formation_depenses', op: 'upsert', row: { ...d } }, () => { DE = DE.filter(x => x.id !== d.id); });
+    $('recOk').disabled = false; if (!ok) return;
+    toast('Covoiturage ajouté : ' + eur(d.montant) + ' encaissés par ' + d.paye_par); $('recMt').value = ''; $('recLib').value = '';
+    $('recZone').innerHTML = recListHtml(f); fTabsRefresh(f);
+  };
+  $('recZone').onclick = async e => {
+    const x = e.target.closest('[data-rdel]'); if (!x) return; const id = x.dataset.rdel;
+    if (depArm !== id) { depArm = id; $('recZone').innerHTML = recListHtml(f); return; }
+    depArm = null; DE = DE.filter(y => y.id !== id); $('recZone').innerHTML = recListHtml(f); fTabsRefresh(f); await persist({ table: 'formation_depenses', op: 'delete', key: 'id', val: id });
+  };
   $('depZone').onchange = async e => {
     const inp = e.target.closest('[data-jadd]'); if (!inp || !inp.files[0]) return; const d = DE.find(y => y.id === inp.dataset.jadd); if (!d) return;
     if (await uploadJustif(d, inp.files[0]) && await persist({ table: 'formation_depenses', op: 'upsert', row: { ...d } })) { toast('Justificatif ajouté'); $('depZone').innerHTML = depListHtml(f); }
@@ -745,7 +770,7 @@ function renderDepenses(f) {
 }
 function depLive() { // mise à jour en direct de la liste quand l'autre ajoute une dépense
   if (!fOpen) return; const f = FO.find(x => x.id === fOpen); if (!f) return;
-  const z = $('depZone'); if (z) z.innerHTML = depListHtml(f); fTabsRefresh(f);
+  const z = $('depZone'); if (z) z.innerHTML = depListHtml(f); const r = $('recZone'); if (r) r.innerHTML = recListHtml(f); fTabsRefresh(f);
   const lg = $('f_lgd'); if (lg) lg.innerHTML = lgDepHtml(f);
 }
 function lgDepHtml(f) { const L = fDeps(f.id).filter(d => d.categorie === 'Logement'), t = L.reduce((s, d) => s + (+d.montant || 0), 0); return '<div class="row" style="justify-content:space-between;align-items:center;gap:10px"><span>' + (L.length ? 'Dépenses de logement : <b>' + eur(t) + '</b>' : 'Aucune dépense de logement notée') + '</span><button class="small" type="button" data-ft-go="depenses">' + (L.length ? 'Voir les dépenses' : 'Ajouter la dépense') + '</button></div>'; }
@@ -756,9 +781,10 @@ const num = v => { const n = parseFloat(String(v == null ? '' : v).replace(/\s/g
 const pct = n => String(Math.round(n * 100) / 100).replace('.', ',');
 function gainCalc(f) {
   const prix = +f.prix || 0, taux = f.taux_charges == null ? 28 : +f.taux_charges, part = f.part_alexandre == null ? 50 : +f.part_alexandre;
-  const ch = prix * taux / 100, dep = fTotal(f.id), reste = prix - ch - dep;
+  const ch = prix * taux / 100, dep = fTotal(f.id), rec = fRecTotal(f.id), reste = prix - ch - dep + rec;
+  const encaisse = p => fRecs(f.id).filter(d => d.paye_par === p).reduce((s, d) => s + (+d.montant || 0), 0);
   const avance = p => fDeps(f.id).filter(d => d.paye_par === p).reduce((s, d) => s + (+d.montant || 0), 0);
-  return { prix, taux, part, ch, dep, reste, gens: [['Alexandre', part], ['Antoine', 100 - part]].map(([p, pc]) => ({ p, pc, s: reste * pc / 100, a: avance(p) })), pro: avance('2A Formation') };
+  return { prix, taux, part, ch, dep, rec, reste, gens: [['Alexandre', part], ['Antoine', 100 - part]].map(([p, pc]) => ({ p, pc, s: reste * pc / 100, a: avance(p), e: encaisse(p) })), pro: avance('2A Formation') };
 }
 function gainHtml(f) {
   const g = gainCalc(f), w = x => g.prix ? Math.max(0, Math.min(100, x / g.prix * 100)).toFixed(1) : 0;
@@ -768,9 +794,9 @@ function gainHtml(f) {
     '<label class="f">Part Alexandre (%)<input id="g_part" inputmode="decimal" autocomplete="off" value="' + pct(g.part) + '"></label></div>' +
     (!g.prix ? '<p class="muted small">Indiquez le tarif de la formation pour voir le calcul.</p>' :
     '<div class="gbar" aria-hidden="true"><i class="c" style="width:' + w(g.ch) + '%"></i><i class="d" style="width:' + w(g.dep) + '%"></i><i class="r" style="width:' + w(Math.max(0, g.reste)) + '%"></i></div>' +
-    '<dl class="gain-calc"><dt>Tarif</dt><dd class="num">' + eur(g.prix) + '</dd><dt><span class="dot c"></span>Charges (' + pct(g.taux) + ' %)</dt><dd class="num">− ' + eur(g.ch) + '</dd><dt><span class="dot d"></span>Dépenses</dt><dd class="num">− ' + eur(g.dep) + '</dd>' +
+    '<dl class="gain-calc"><dt>Tarif</dt><dd class="num">' + eur(g.prix) + '</dd><dt><span class="dot c"></span>Charges (' + pct(g.taux) + ' %)</dt><dd class="num">− ' + eur(g.ch) + '</dd><dt><span class="dot d"></span>Dépenses</dt><dd class="num">− ' + eur(g.dep) + '</dd>' + (g.rec ? '<dt><span class="dot v"></span>Covoiturage</dt><dd class="num">+ ' + eur(g.rec) + '</dd>' : '') +
     '<dt class="tot"><span class="dot r"></span>Reste à partager</dt><dd class="tot num' + (g.reste < 0 ? ' neg' : '') + '">' + eur(g.reste) + '</dd></dl>' +
-    '<div class="gain-p">' + g.gens.map(x => '<div class="gp"><span class="small">' + esc(x.p) + ' touche</span><b class="num">' + eur(x.s + x.a) + '</b><span class="small muted">' + eur(x.s) + ' de part (' + pct(x.pc) + ' %)' + (x.a ? ' + ' + eur(x.a) + ' de frais avancés' : '') + '</span></div>').join('') + '</div>' +
+    '<div class="gain-p">' + g.gens.map(x => '<div class="gp"><span class="small">' + esc(x.p) + ' touche</span><b class="num">' + eur(x.s + x.a - x.e) + '</b><span class="small muted">' + eur(x.s) + ' de part (' + pct(x.pc) + ' %)' + (x.a ? ' + ' + eur(x.a) + ' de frais avancés' : '') + (x.e ? ' − ' + eur(x.e) + ' de covoiturage déjà encaissé' : '') + '</span></div>').join('') + '</div>' +
     (g.pro ? '<p class="small muted" style="margin:0">' + eur(g.pro) + ' payés avec la carte pro 2A : déjà déduits, remboursés à personne.</p>' : '')) + '</div>';
 }
 function gainRefresh(f) { const z = $('gainZone'); if (z) z.innerHTML = gainHtml(f); }
@@ -779,6 +805,14 @@ async function gainSave(f, id, v) {
   if (id === 'g_taux') f.taux_charges = n == null ? 28 : Math.max(0, Math.min(100, n));
   if (id === 'g_part') f.part_alexandre = n == null ? 50 : Math.max(0, Math.min(100, n));
   f.maj = nowIso(); gainRefresh(f); await persist({ table: 'formations', op: 'upsert', row: { ...f } });
+}
+
+function recListHtml(f) {
+  const L = fRecs(f.id).slice().sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.cree_le || '').localeCompare(a.cree_le || ''));
+  if (!L.length) return '<p class="muted small" style="margin:0">Aucune recette de covoiturage notée.</p>';
+  const by = {}; L.forEach(d => { by[d.paye_par] = (by[d.paye_par] || 0) + (+d.montant || 0); });
+  return '<div class="small" style="margin-bottom:6px">Total <b>' + eur(fRecTotal(f.id)) + '</b> — ' + Object.entries(by).map(([p, v]) => esc(p) + ' a encaissé ' + eur(v)).join(', ') + '</div>' +
+    '<ul class="list">' + L.map(d => '<li><div style="flex:1 1 140px"><b>' + esc(d.libelle || 'Covoiturage') + '</b><div class="muted small">' + esc(rel(d.date)) + ' · encaissé par ' + esc(d.paye_par) + '</div><div class="row" style="margin-top:6px"><button class="small" data-rdel="' + esc(d.id) + '">' + (depArm === d.id ? 'Confirmer la suppression' : 'Supprimer') + '</button></div></div><b class="num dep-m">+ ' + eur(d.montant) + '</b></li>').join('') + '</ul>';
 }
 
 function fBlock(f) {
