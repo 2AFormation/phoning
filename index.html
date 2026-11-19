@@ -9,8 +9,8 @@
 <link rel="icon" href="icone-192.png">
 <link rel="apple-touch-icon" href="icone-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="2A Phoning">
-<title>2A Phoning</title>
+<meta name="apple-mobile-web-app-title" content="2A Travail">
+<title>2A Travail</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500&display=swap">
@@ -90,6 +90,8 @@ label.f{display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:14p
 .badge{border:1px dashed var(--line);border-radius:12px;padding:10px 12px;min-width:130px;flex:1 1 130px;color:var(--muted)}
 .badge.on{border:1px solid var(--accent);color:var(--ink);background:var(--soft)}
 .badge b{display:block;font-family:var(--f-display);font-size:18px}
+.kb{font-family:var(--f-data);font-size:12px;opacity:.6;margin-right:8px}
+@media (hover:none){.kb{display:none}}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:700;z-index:20;max-width:90vw}
 .note{border-left:4px solid var(--warn);padding:8px 12px;background:var(--soft);border-radius:6px}
 /* carte */
@@ -107,13 +109,33 @@ th,td{text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);vertic
 th{font-family:var(--f-data);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .tw{overflow-x:auto}
 @media (max-width:640px){.card{padding:16px}.call{width:100%}nav.tabs .in{flex-wrap:wrap;overflow:visible;gap:0;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}nav.tabs .brand{order:0;flex:1 1 calc(100% - 140px);padding-block:10px}nav.tabs #logout{order:1;margin-left:0!important}nav.tabs a{order:2;flex:1 1 18%;min-width:0;text-align:center;padding:10px 2px;font-size:14px}nav .long{display:none}}
+/* travail à deux */
+.sub .in{max-width:1100px;margin:0 auto;padding:12px max(16px,env(safe-area-inset-left,0px)) 0;display:flex;gap:8px;flex-wrap:wrap}
+.sub a,.seg button{padding:7px 12px;border-radius:999px;border:1px solid var(--line);text-decoration:none;font-weight:700;color:var(--muted);background:var(--panel);font-size:14px}
+.sub a[aria-current],.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.seg{gap:8px}
+.big3{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))}
+.bigcard{display:flex;flex-direction:column;gap:4px;padding:20px;border-radius:16px;background:var(--panel);border:1px solid var(--line);text-decoration:none;color:var(--ink);min-height:128px}
+.bigcard:hover{border-color:var(--accent)}
+.bigcard.call-c{background:var(--signal);border-color:var(--signal);color:var(--signal-ink)}
+.bigcard.hot{border:2px solid var(--ok);box-shadow:0 0 0 4px color-mix(in srgb,var(--ok) 18%,transparent)}
+.bc-t{font-family:var(--f-display);font-weight:800;font-size:22px}
+.bc-n{font-family:var(--f-display);font-weight:800;font-size:42px;line-height:1}
+.bc-s{font-size:14px;font-weight:700;opacity:.85}
+.chk{width:36px;height:36px;border-radius:50%;padding:0;flex:none;font-size:18px}
+.chk.on{background:var(--ok);color:#fff;border-color:var(--ok)}
+.list li>.chk+div{flex:1 1 200px}
+.nb{display:inline-block;min-width:18px;margin-left:4px;padding:0 5px;border-radius:999px;background:var(--bad);color:#fff;font-size:12px;line-height:18px;text-align:center}
+details>summary{cursor:pointer}
+.card>label.f,form.panel>label.f{flex:none}
+@media (max-width:640px){nav.tabs a{flex:1 1 30%;font-size:14px;padding:9px 0}.bc-n{font-size:34px}.bigcard{min-height:100px;padding:16px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
 <div class="wrap" id="loginZone" hidden>
   <div class="card" style="max-width:420px;margin-top:8vh">
-    <div class="brand">2A <b>Phoning</b></div>
+    <div class="brand">2A <b>Travail</b></div>
     <h1 style="font-size:26px">Connexion</h1>
     <form id="loginForm" class="row" style="flex-direction:column;align-items:stretch">
       <label class="f">Adresse mail<input id="lEmail" type="email" autocomplete="username" required></label>
@@ -131,31 +153,48 @@ th{font-family:var(--f-data);font-size:11px;text-transform:uppercase;letter-spac
 </div>
 <div id="appZone" hidden>
 <nav class="tabs" aria-label="Sections"><div class="in">
-  <span class="brand">2A <b>Phoning</b></span>
+  <span class="brand">2A <b>Travail</b></span>
+  <span class="chip late" id="sync" hidden></span>
   <a href="#accueil" data-v="accueil">Accueil</a>
-  <a href="#seance" data-v="seance">Séance<span class="long"> d'appels</span></a>
-  <a href="#campagne" data-v="campagne">Campagne</a>
-  <a href="#carte" data-v="carte">Carte</a>
-  <a href="#clients" data-v="clients">Clients<span class="long"> et devis</span></a>
+  <a href="#seance" data-v="seance">Appeler</a>
+  <a href="#taches" data-v="taches">Tâches<span class="nb" id="tBadge" hidden></span></a>
+  <a href="#clients" data-v="clients">Clients</a>
+  <a href="#formations" data-v="formations">Formations</a>
+  <a href="#notes" data-v="notes">Notes</a>
   <button id="logout" class="small" style="margin-left:8px">Se déconnecter</button>
 </div></nav>
+<div class="sub" id="subnav" hidden><div class="in">
+  <a href="#seance" data-v="seance">Séance</a><a href="#campagne" data-v="campagne">Campagne</a><a href="#carte" data-v="carte">Carte</a><a href="#bilan" data-v="bilan">Bilan et recherche</a>
+</div></div>
 
 <div class="wrap">
   <div id="status" class="note" hidden></div>
 
   <section id="v-accueil" data-view="accueil">
+    <div class="eyebrow" id="mjDate"></div><h1 id="mjHello">Bonjour</h1>
+    <div class="big3" id="mjCards" style="margin-top:16px">
+      <a class="bigcard call-c" href="#seance"><span class="bc-t">Appeler</span><span class="bc-n num" id="mjCallN"></span><span class="bc-s" id="mjCallS"></span></a>
+      <a class="bigcard" href="#taches" id="mjTaskCard"><span class="bc-t">Mes tâches</span><span class="bc-n num" id="mjTaskN"></span><span class="bc-s" id="mjTaskS"></span></a>
+      <a class="bigcard" href="#clients"><span class="bc-t">Mes clients</span><span class="bc-n num" id="mjCliN"></span><span class="bc-s" id="mjCliS"></span></a>
+    </div>
+    <div class="panel" style="margin-top:16px"><h2>À faire aujourd’hui</h2><ul class="list" id="mjList"></ul></div>
+    <div class="panel" style="margin-top:16px" id="mjFormP"><h2>Prochaine formation</h2><div id="mjForm" style="margin-top:10px"></div></div>
+    <div class="panel" style="margin-top:16px" id="mjNotesP"><div class="row" style="justify-content:space-between"><h2>Derniers messages</h2><a href="#notes" class="small">Tout voir</a></div><ul class="list" id="mjNotes"></ul></div>
+  </section>
+
+  <section id="v-bilan" data-view="bilan" hidden>
     <div class="row" style="justify-content:space-between;align-items:flex-end">
       <div><div class="eyebrow" id="today"></div><h1 id="hello">Bonjour</h1></div>
       <a class="btn call" href="#seance">Commencer une séance</a>
     </div>
     <div class="grid" style="margin-top:16px">
       <div class="panel">
-        <h2>Cette séance</h2>
+        <h2>Aujourd’hui</h2>
         <p class="muted small" id="goalTxt"></p>
         <div class="gauge" aria-hidden="true"><i id="gaugeBar" style="width:0%"></i></div>
         <div class="row" style="margin-top:10px">
-          <label class="f" style="flex:0 1 auto">Objectif de séance
-            <select id="goalSel"><option>10</option><option selected>15</option><option>20</option><option>30</option><option>50</option></select></label>
+          <label class="f" style="flex:0 1 auto">Objectif du jour
+            <select id="goalSel"></select></label>
         </div>
       </div>
       <div class="panel">
@@ -169,8 +208,22 @@ th{font-family:var(--f-data);font-size:11px;text-transform:uppercase;letter-spac
       <ul class="list" id="rappels"></ul>
     </div>
     <div class="panel" style="margin-top:16px">
+      <h2>Retrouver une structure</h2>
+      <label class="f" style="margin-top:10px">Nom, ville ou département<input id="gSearch" type="search" autocomplete="off" placeholder="ex. ADSEA, Lyon, 69"></label>
+      <ul class="list" id="gRes"></ul>
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <div class="row" style="justify-content:space-between"><h2>Appels du jour</h2><span class="muted small" id="jourCount"></span></div>
+      <ul class="list" id="jour"></ul>
+    </div>
+    <div class="panel" style="margin-top:16px">
       <h2>Paliers</h2>
       <div class="badges" style="margin-top:12px" id="badges"></div>
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <h2>Exporter les appels</h2>
+      <p class="muted small" style="margin:6px 0 10px">Fichier CSV (s’ouvre dans Excel) pour le report dans Clients et relances.</p>
+      <div class="row" style="align-items:flex-end"><label class="f" style="flex:0 1 auto">Période<select id="exPer"><option value="jour">Aujourd’hui</option><option value="semaine">Cette semaine</option><option value="tout" selected>Tout</option></select></label><button id="exGo">Télécharger le CSV</button></div>
     </div>
   </section>
 
@@ -183,7 +236,8 @@ th{font-family:var(--f-data);font-size:11px;text-transform:uppercase;letter-spac
         <label class="f">Liste<select id="selList">
           <option value="R">Relances après mail</option>
           <option value="S">Établissements sans mail</option>
-          <option value="RS">Les deux</option></select></label>
+          <option value="RS">Les deux</option>
+          <option value="N">Numéros à chercher (sans numéro)</option></select></label>
         <button class="primary" id="go">Lancer</button>
       </div>
       <p class="muted small" id="poolInfo" style="margin:10px 0 0"></p>
@@ -238,18 +292,70 @@ th{font-family:var(--f-data);font-size:11px;text-transform:uppercase;letter-spac
   </section>
 
   <section id="v-clients" data-view="clients" hidden>
-    <div class="row" style="justify-content:space-between;align-items:flex-end">
-      <div><div class="eyebrow">Repris de l'onglet « Pour Antoine »</div><h1>Clients et devis</h1></div>
-      <span class="muted small" id="cliDate"></span>
+    <div id="cMain">
+      <div class="row" style="justify-content:space-between;align-items:flex-end">
+        <div><div class="eyebrow" id="cliDate"></div><h1>Clients et devis</h1></div>
+        <button class="primary" id="cAdd">Ajouter une structure</button>
+      </div>
+      <p class="note small" id="cNote" hidden>Lecture seule pour l’instant : la modification sera possible quand Alexandre aura lancé 06_travail.sql.</p>
+      <div class="row seg" id="cSeg" style="margin-top:16px"></div>
+      <details class="panel" id="cResumeD" style="margin-top:16px"><summary><b>En bref</b></summary><div id="resume"></div></details>
+      <div id="cliSecs" style="display:flex;flex-direction:column;gap:16px;margin-top:16px"></div>
+      <div class="row" style="margin-top:16px"><button id="cExport">Exporter les clients (CSV)</button></div>
     </div>
-    <div class="panel" id="resume" style="margin-top:16px"></div>
-    <div id="cliSecs" style="display:flex;flex-direction:column;gap:16px;margin-top:16px"></div>
+    <div id="cCard" hidden></div>
+  </section>
+
+  <section id="v-taches" data-view="taches" hidden>
+    <div class="panel" id="tMissing" hidden><h2>Pas encore activé</h2><p class="muted">Alexandre doit lancer une fois le script 06_travail.sql dans Supabase. Rien d’autre ne change d’ici là.</p></div>
+    <div id="tMain">
+      <h1>Tâches</h1>
+      <form id="tAdd" class="panel" style="margin-top:16px;display:flex;flex-direction:column;gap:12px">
+        <h2>Envoyer une demande</h2>
+        <div class="row seg" id="tType"><button type="button" data-t="Devis">Un devis</button><button type="button" data-t="Formation">Une formation</button><button type="button" data-t="Autre">Autre chose</button></div>
+        <div class="row" style="align-items:flex-end">
+          <label class="f" id="tClientLbl">Structure concernée<input id="tClient" list="tClients" autocomplete="off" placeholder="Nom de l’établissement"></label>
+          <label class="f" style="flex:0 1 160px">À<select id="tPour"></select></label>
+          <label class="f" style="flex:0 1 170px">Pour quand<input type="date" id="tDate"></label>
+        </div>
+        <label class="f" id="tDetailLbl">Précisions (facultatif)<textarea id="tDetail" rows="2" placeholder="Interlocuteur, thème, nombre de jours…"></textarea></label>
+        <div class="row" style="justify-content:flex-end"><button class="primary" type="submit">Envoyer</button></div>
+        <datalist id="tClients"></datalist>
+      </form>
+      <div class="panel" style="margin-top:16px">
+        <div class="row seg" id="tSeg"></div>
+        <ul class="list" id="tList"></ul>
+        <button id="tNotif" class="small" style="margin-top:12px" hidden>Être alerté sur cet appareil</button>
+      </div>
+    </div>
+    <div id="tCard" hidden></div>
+  </section>
+
+  <section id="v-formations" data-view="formations" hidden>
+    <div class="panel" id="fMissing" hidden><h2>Pas encore activé</h2><p class="muted">Alexandre doit lancer une fois le script 06_travail.sql dans Supabase. Rien d’autre ne change d’ici là.</p></div>
+    <div id="fMain">
+      <div class="row" style="justify-content:space-between;align-items:flex-end"><h1>Formations</h1><button class="primary" id="fAdd">Ajouter une formation</button></div>
+      <div id="fList" style="display:flex;flex-direction:column;gap:12px;margin-top:16px"></div>
+    </div>
+    <div id="fCard" hidden></div>
+  </section>
+
+  <section id="v-notes" data-view="notes" hidden>
+    <div class="panel" id="nMissing" hidden><h2>Pas encore activé</h2><p class="muted">Alexandre doit lancer une fois le script 06_travail.sql dans Supabase. Rien d’autre ne change d’ici là.</p></div>
+    <div id="nMain">
+      <h1>Notes et décisions</h1>
+      <form id="nAdd" class="panel" style="margin-top:16px;display:flex;flex-direction:column;gap:10px">
+        <label class="f">Message pour l’équipe<textarea id="nTexte" rows="3" placeholder="Ce que vous voulez partager ou garder en mémoire…"></textarea></label>
+        <div class="row" style="justify-content:space-between"><label class="row" style="font-weight:700"><input type="checkbox" id="nDec"> C’est une décision</label><button class="primary" type="submit">Publier</button></div>
+      </form>
+      <div class="panel" style="margin-top:16px"><div class="row seg" id="nSeg"></div><ul class="list" id="nList"></ul></div>
+    </div>
   </section>
 </div>
 </div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js?v=2"></script>
-<script src="app.js?v=2"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>
