@@ -486,7 +486,7 @@ function notifyNew(old, neu) {
   if (taLoaded) {
     const prev = {}; old.forEach(t => prev[t.id] = t);
     neu.forEach(t => { const p = prev[t.id]; let msg = '';
-      if (t.pour === me.prenom && t.de && t.de !== me.prenom && !t.vu && !p) msg = 'Nouvelle demande de ' + t.de + ' : ' + t.titre;
+      if (t.pour === me.prenom && t.de && t.de !== me.prenom && t.de !== 'Test' && !t.vu && !p) msg = 'Nouvelle demande de ' + t.de + ' : ' + t.titre;
       else if (t.de === me.prenom && t.fait && t.fait_par !== me.prenom && p && !p.fait) msg = t.fait_par + ' a terminé : ' + t.titre;
       if (msg) { toast(msg); try { if (window.Notification && Notification.permission === 'granted' && document.hidden) new Notification('2A Travail', { body: msg }); } catch (e) {} } });
   }
@@ -537,7 +537,7 @@ function renderTaches() {
   let list = f === 'mes' ? mine : f === 'env' ? env : done;
   list = list.slice().sort(f === 'faites' ? (a, b) => (b.fait_le || '').localeCompare(a.fait_le || '') : (a, b) => (dateOnly(a.echeance) || '9999').localeCompare(dateOnly(b.echeance) || '9999') || (a.cree_le || '').localeCompare(b.cree_le || ''));
   $('tList').innerHTML = list.slice(0, 100).map(taskRow).join('') || '<li class="muted">' + (f === 'faites' ? 'Rien de terminé pour l’instant.' : f === 'env' ? 'Aucune demande en attente.' : 'Rien à faire : bravo.') + '</li>';
-  const nb = $('tNotif'); nb.hidden = !(window.Notification && Notification.permission === 'default');
+  pushRefresh();
 }
 async function addTask() {
   const client = $('tClient').value.trim(), detail = $('tDetail').value.trim();
@@ -692,12 +692,51 @@ function renderMonJour() {
   ca.filter(r => dateOnly(r.quand) && dateOnly(r.quand) <= today).forEach(r => items.push('<li><div><b>' + esc(r.structure) + '</b><div class="small">' + esc(r.prochaine_action || r.ou_on_en_est) + '</div></div>' + dueChip(dateOnly(r.quand)) + '<a class="btn" href="#clients">Clients</a></li>'));
   $('mjList').innerHTML = items.slice(0, 8).join('') + (items.length > 8 ? '<li class="muted small">Et ' + (items.length - 8) + ' autres.</li>' : '') || '<li class="muted">Rien d’urgent aujourd’hui.</li>';
   const nf = TRAVAIL_OK ? FO.filter(f => fActive(f) && (!f.date_fin || f.date_fin >= today) && !(f.date_debut && f.date_debut < today && !f.date_fin)).sort(fSort)[0] : null;
-  $('mjFormP').hidden = !TRAVAIL_OK;
+  $('mjNotif').hidden = !(pushState === 'off' || pushState === 'ios'); $('mjFormP').hidden = !TRAVAIL_OK;
   $('mjForm').innerHTML = nf ? '<div class="row" style="justify-content:space-between"><div><b>' + esc(nf.intitule) + '</b><div class="muted small">' + esc([nf.client, fDates(nf)].filter(Boolean).join(' · ')) + '</div>' + (fNext(nf) ? '<div class="small" style="margin-top:6px"><b>Prochaine étape :</b> ' + esc(fNext(nf).libelle) + '</div>' : '') + '</div><button data-fopen="' + esc(nf.id) + '">Ouvrir</button></div>' : '<span class="muted">Aucune formation à venir enregistrée.</span>';
   $('mjNotesP').hidden = !TRAVAIL_OK;
   $('mjNotes').innerHTML = TRAVAIL_OK ? NO.slice().sort((a, b) => (b.cree_le || '').localeCompare(a.cree_le || '')).slice(0, 3).map(n => '<li><div><div class="small"><b>' + esc(n.auteur) + '</b> · ' + esc(fdt(n.cree_le)) + (n.decision ? ' <span class="chip ok">Décision</span>' : '') + '</div><div style="white-space:pre-wrap">' + esc(n.texte.slice(0, 160)) + '</div></div></li>').join('') || '<li class="muted">Aucun message.</li>' : '';
 }
 
+
+// ---------- notifications sur le téléphone (même appli fermée)
+const FN_NOTIF = CFG.supabaseUrl + '/functions/v1/notifier';
+const pushOk = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent), standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+const b64u = s => { const p = '='.repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+let pushState = '';
+async function pushRefresh() {
+  const z = $('notifZone'); if (!z) return;
+  if (!pushOk()) { pushState = isIOS && !standalone ? 'ios' : 'non'; }
+  else if (Notification.permission === 'denied') pushState = 'refus';
+  else { try { const reg = await navigator.serviceWorker.getRegistration(); const s = reg && await reg.pushManager.getSubscription(); pushState = s ? 'on' : 'off'; } catch (e) { pushState = 'off'; } }
+  z.innerHTML = pushState === 'on' ? '<span class="chip ok">Notifications activées sur cet appareil</span> <button id="notifTest" class="small">M’envoyer un test</button>'
+    : pushState === 'off' ? '<button class="primary" id="notifOn">Recevoir les notifications sur ce téléphone</button><div class="muted small" style="margin-top:6px">Pour être prévenu d’une nouvelle demande, même appli fermée.</div>'
+    : pushState === 'ios' ? '<div class="note small">Sur iPhone : ajoutez d’abord l’appli à l’écran d’accueil (bouton Partager, puis « Sur l’écran d’accueil »), ouvrez-la depuis cette icône, puis revenez ici.</div>'
+    : pushState === 'refus' ? '<div class="note small">Les notifications sont bloquées pour cette appli : autorisez-les dans les réglages du téléphone, puis revenez ici.</div>'
+    : '<div class="muted small">Ce navigateur ne permet pas les notifications.</div>';
+  const on = $('notifOn'); if (on) on.onclick = pushSubscribe;
+  const t = $('notifTest'); if (t) t.onclick = pushTest;
+}
+async function pushSubscribe() {
+  try {
+    if (await Notification.requestPermission() !== 'granted') { pushRefresh(); return; }
+    const { cle } = await (await fetch(FN_NOTIF + '?cle')).json();
+    const reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(cle) });
+    const j = sub.toJSON();
+    const { error } = await sb.from('push_abonnements').upsert({ endpoint: j.endpoint, prenom: me.prenom, abonnement: j });
+    if (error) throw error;
+    toast('Notifications activées'); pushRefresh();
+  } catch (e) { toast('Activation impossible pour le moment : réessayez.'); pushRefresh(); }
+}
+async function pushTest() { // passe par une vraie demande « pour moi » : envoie la notification puis la supprime
+  const id = uid(), row = { id, titre: 'Test de notification', type: 'Autre', client: '', detail: 'Tout fonctionne', de: 'Test', pour: me.prenom, echeance: null, fait: false, fait_le: null, fait_par: '', vu: true, retour_vu: true, cree_le: nowIso(), maj: nowIso() };
+  const { error } = await sb.from('taches').insert(row);
+  if (error) { toast('Test impossible pour le moment.'); return; }
+  toast('Test envoyé : la notification arrive dans quelques secondes');
+  setTimeout(() => sb.from('taches').delete().eq('id', id), 8000);
+}
 function initTravail() {
   document.addEventListener('click', e => {
     let b;
@@ -710,7 +749,6 @@ function initTravail() {
   $('tAdd').addEventListener('submit', e => { e.preventDefault(); addTask(); });
   $('tType').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; tType = b.dataset.t; fillTForm(); });
   $('tSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { ls.tf = b.dataset.f; save(); renderTaches(); } });
-  $('tNotif').addEventListener('click', async () => { try { await Notification.requestPermission(); } catch (e) {} renderTaches(); });
   $('cSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { ls.cf = b.dataset.f; save(); renderClients(); } });
   $('cAdd').addEventListener('click', () => { cOpen = 'new'; renderClients(); cCardRender(); });
   $('cExport').addEventListener('click', exportClients);
@@ -757,5 +795,5 @@ function initViews() { if (viewsReady) return; viewsReady = true;
   $('nxSet').addEventListener('click', () => { $('nxPanel').hidden = false; $('nxBar').hidden = true; $('nxCfg').open = true; });
   ['nxDep', 'nxOrdre', 'nxList'].forEach(id => $(id).addEventListener('change', () => { ls[id] = $(id).value; save(); nxInfo(); if (nxMode) { Q = nxPool().map(c => c.id); qi = 0; renderCard(); } }));
   $('nxReset').addEventListener('click', () => { ls.passes = {}; save(); nxInfo(); toast('Les établissements passés reprennent leur place'); });
-  initTravail(); }
+  initTravail(); pushRefresh().then(() => { if (curView() === 'accueil') renderMonJour(); }); }
 })();

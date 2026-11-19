@@ -183,6 +183,7 @@ details>summary{cursor:pointer}
       <a class="bigcard" href="#taches" id="mjTaskCard"><span class="bc-t">Mes tâches</span><span class="bc-n num" id="mjTaskN"></span><span class="bc-s" id="mjTaskS"></span></a>
       <a class="bigcard" href="#clients"><span class="bc-t">Mes clients</span><span class="bc-n num" id="mjCliN"></span><span class="bc-s" id="mjCliS"></span></a>
     </div>
+    <a class="note" id="mjNotif" href="#taches" hidden style="display:block;margin-top:16px;text-decoration:none"><b>Activez les notifications</b> pour être prévenu des demandes d’Antoine ou d’Alexandre, même appli fermée →</a>
     <div class="panel" style="margin-top:16px"><h2>À faire aujourd’hui</h2><ul class="list" id="mjList"></ul></div>
     <div class="panel" style="margin-top:16px" id="mjFormP"><h2>Prochaine formation</h2><div id="mjForm" style="margin-top:10px"></div></div>
     <div class="panel" style="margin-top:16px" id="mjNotesP"><div class="row" style="justify-content:space-between"><h2>Derniers messages</h2><a href="#notes" class="small">Tout voir</a></div><ul class="list" id="mjNotes"></ul></div>
@@ -344,7 +345,7 @@ details>summary{cursor:pointer}
       <div class="panel" style="margin-top:16px">
         <div class="row seg" id="tSeg"></div>
         <ul class="list" id="tList"></ul>
-        <button id="tNotif" class="small" style="margin-top:12px" hidden>Être alerté sur cet appareil</button>
+        <div id="notifZone" style="margin-top:12px"></div>
       </div>
     </div>
     <div id="tCard" hidden></div>
@@ -375,6 +376,6 @@ details>summary{cursor:pointer}
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js?v=2"></script>
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
