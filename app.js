@@ -969,6 +969,15 @@ function liensHtml(f) {
   const L = liensOf(f);
   return (L.map((l, i) => '<li><div style="min-width:0"><a href="' + esc(l.u) + '" target="_blank" rel="noopener noreferrer"><b>' + esc(l.t || l.u) + '</b></a></div><button type="button" class="small" data-ldel="' + i + '">Retirer</button></li>').join('')) || '<li class="muted">Aucun lien pour le moment.</li>';
 }
+
+function scanLien(f) { const L = liensOf(f); return L.find(l => /onedrive|dossier/i.test(l.t || '')) || L.find(l => /1drv\.ms|onedrive\.live|sharepoint\.com/i.test(l.u || '')) || null; }
+function scanHtml(f) {
+  const l = scanLien(f);
+  return l
+    ? '<div class="scanbar"><a class="btn primary" href="' + esc(l.u) + '" target="_blank" rel="noopener noreferrer" id="f_scan_go">📷 Scanner / ouvrir le dossier OneDrive</a><div class="muted small">Dans OneDrive : <b>+ → Scanner</b>, tout photographier, enregistrer en <b>PDF</b> dans <b>2_Emargements</b> ou <b>7_Evaluations</b>, puis cocher « Émargements et évaluations récupérés ».</div></div>'
+    : '<div class="scanbar"><button type="button" id="f_scan_add">📷 Scanner : ajouter le dossier OneDrive</button><div class="muted small">Collez une fois le lien du dossier de la session (OneDrive → Partager → Copier le lien). Le bouton Scanner apparaîtra ici.</div></div>';
+}
+function scanRefresh(f) { const e = $('f_scan'); if (e) e.innerHTML = scanHtml(f); }
 function fSuiviHtml(f) {
   return '<div class="suivi"><h3>Facturation</h3><div class="row"><label class="f">Facture envoyée le<input type="date" id="f_fact" value="' + esc(dateOnly(f.facture_le)) + '"></label><label class="f">Payée le<input type="date" id="f_paye" value="' + esc(dateOnly(f.paye_le)) + '"></label></div><div id="f_payl">' + payLine(f) + '</div>' +
     '<h3>Liens utiles</h3><ul class="list" id="f_liens">' + liensHtml(f) + '</ul>' +
@@ -982,11 +991,12 @@ function fSuiviInit(f) {
   $('f_fact').onchange = dates; $('f_paye').onchange = dates;
   $('f_ladd').onclick = async () => {
     const u = lienUrl($('f_lu').value); if (!u) { toast('Adresse du lien non valide.'); return; }
-    f.liens = liensOf(f).concat([{ t: $('f_lt').value.trim() || new URL(u).hostname, u }]); $('f_liens').innerHTML = liensHtml(f); $('f_lt').value = ''; $('f_lu').value = ''; await save('Lien ajouté');
+    f.liens = liensOf(f).concat([{ t: $('f_lt').value.trim() || new URL(u).hostname, u }]); $('f_liens').innerHTML = liensHtml(f); $('f_lt').value = ''; $('f_lu').value = ''; scanRefresh(f); await save('Lien ajouté');
   };
-  $('f_liens').onclick = async e => { const b = e.target.closest('[data-ldel]'); if (!b) return; f.liens = liensOf(f).filter((x, i) => i !== +b.dataset.ldel); $('f_liens').innerHTML = liensHtml(f); await save('Lien retiré'); };
+  $('f_liens').onclick = async e => { const b = e.target.closest('[data-ldel]'); if (!b) return; f.liens = liensOf(f).filter((x, i) => i !== +b.dataset.ldel); $('f_liens').innerHTML = liensHtml(f); scanRefresh(f); await save('Lien retiré'); };
   $('f_ret').onchange = async () => { f.retours = $('f_ret').value.trim(); await save('Retours enregistrés'); };
   $('f_ics').onclick = () => exportIcs([f]); $('f_dup').onclick = () => fDupDialog(f);
+  if ($('f_scan')) $('f_scan').onclick = e => { if (!e.target.closest('#f_scan_add')) return; fTab = 'infos'; fTabShow(); $('f_lt').value = 'Dossier OneDrive'; $('f_lu').scrollIntoView({ block: 'center' }); $('f_lu').focus(); };
 }
 
 // ----- agenda téléphone (.ics)
@@ -1140,7 +1150,7 @@ function fCardRender() {
     '<div class="row"><label class="f">Responsable<select id="f_resp"><option value="">—</option>' + pourOptions(f.responsable) + '</select></label><label class="f">Statut<select id="f_stat">' + FSTAT.map(x => '<option' + (x === f.statut ? ' selected' : '') + '>' + x + '</option>').join('') + '</select></label></div>' +
     '<label class="f">Notes<textarea id="f_notes" rows="3">' + esc(f.notes) + '</textarea></label>' + fSuiviHtml(f) +
     '<div class="row" style="justify-content:space-between"><button id="f_del">Supprimer la formation</button><button class="primary" id="f_save">Enregistrer</button></div></div>' +
-    '<div data-ft="etapes" class="ftab"><ul class="list" id="fItems"></ul>' +
+    '<div data-ft="etapes" class="ftab"><div id="f_scan">' + scanHtml(f) + '</div><ul class="list" id="fItems"></ul>' +
     '<div class="row"><label class="f" style="flex:3 1 220px">Ajouter une étape<input id="f_new" autocomplete="off"></label><button id="f_addi">Ajouter</button></div></div>' +
     '<div data-ft="logement" class="ftab lg"><div class="row" style="justify-content:space-between;align-items:center"><h3>Logement</h3><span id="f_lgc">' + lgChip(f) + '</span></div>' +
       '<div class="row seg" id="f_lgs">' + LGS.map(s => '<button type="button" data-lg="' + s + '" aria-pressed="' + ((f.logement_statut || 'À réserver') === s) + '">' + (s === 'Réservé' ? '✓ ' : '') + s + '</button>').join('') + '</div>' +
