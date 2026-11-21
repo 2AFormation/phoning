@@ -131,7 +131,9 @@ async function boot() {
     ALL = Object.values(C); A = {}; app.forEach(r => A[r.etab_id] = fromRow(r));
     CLI = cli; inf.forEach(i => INFOS[i.cle] = i.valeur);
     await loadNumeros(); await loadCampagne(); await loadTravail(); await loadDepenses(); await loadReglages(); syncChip(); flush();
-    status(''); initViews(); route();
+    status(''); initViews();
+    if (typeof EMG !== 'undefined') EMG.init({ sb, toast, esc, $ }); // onglet Émargement (emargement.js), visible des seuls formateurs
+    route();
     sb.channel('appels').on('postgres_changes', { event: '*', schema: 'public', table: 'appels' }, p => {
       if (p.eventType === 'DELETE') delete A[p.old.etab_id]; else A[p.new.etab_id] = fromRow(p.new);
       refreshCurrent();
@@ -149,7 +151,7 @@ async function boot() {
 }
 
 // ---------- vues
-const VIEWS = ['accueil', 'seance', 'campagne', 'carte', 'bilan', 'clients', 'taches', 'formations', 'notes'];
+const VIEWS = ['accueil', 'seance', 'campagne', 'carte', 'bilan', 'clients', 'taches', 'formations', 'notes', 'emargement'];
 const GROUP = { campagne: 'seance', carte: 'seance', bilan: 'seance' };
 const curView = () => VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'accueil';
 function route() {
@@ -162,6 +164,7 @@ function route() {
   if (v !== 'taches') tNew.clear();
   if (v === 'carte') drawMap(); if (v === 'accueil') renderMonJour(); if (v === 'bilan') renderBilan(); if (v === 'campagne') renderCampagne();
   if (v === 'taches') renderTaches(); if (v === 'clients') renderClients(); if (v === 'formations') renderFormations(); if (v === 'notes') renderNotes();
+  if (typeof EMG !== 'undefined') { if (v === 'emargement') EMG.afficher(); else EMG.quitter(); } // onglet Émargement (emargement.js)
   updateBadge(); window.scrollTo(0, 0);
 }
 addEventListener('hashchange', () => { if (!recovering) route(); });

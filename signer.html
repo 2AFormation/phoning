@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#2E5B4E">
+<meta name="referrer" content="no-referrer">
+<title>Émargement – 2A Formation</title>
+<link rel="icon" href="icone-192.png">
+<style>
+/* Page stagiaire : une colonne, gros boutons, contraste fort, aucun compte */
+:root{--vert:#2E5B4E;--vert-f:#1F4238;--fond:#F6F7F5;--encre:#1C2B27;--gris:#4F5D59;--ligne:#C9D3CF;--doux:#E4EEEA;--rouge:#A8323C;--blanc:#fff}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--fond);color:var(--encre);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:17px;line-height:1.45}
+header{background:var(--vert);color:var(--blanc);padding:calc(16px + env(safe-area-inset-top,0px)) 20px 16px}
+.marque{display:flex;align-items:center;gap:10px;font-weight:600;font-size:16px}
+.logo{width:34px;height:34px;border-radius:9px;background:var(--blanc);color:var(--vert);font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sous{font-size:14px;color:#DCEAE4;margin-top:4px}
+main{max-width:520px;margin:0 auto;padding:22px 18px calc(28px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:18px;min-height:calc(100vh - 80px)}
+h1{font-size:22px;line-height:1.25;margin:0}
+h2{font-size:19px;margin:0}
+p{margin:0}
+.carte{background:var(--blanc);border:1px solid var(--ligne);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:6px}
+.gris{color:var(--gris)}
+.petit{font-size:15px}
+.info{background:var(--doux);border-radius:12px;padding:14px 16px;font-size:15px}
+.info a,.lien{color:var(--vert-f);font-weight:600}
+.alerte{background:#FBEDEE;border:1px solid #E6B8BC;color:#6E1F26;border-radius:12px;padding:14px 16px;font-size:16px}
+.bouton{display:flex;align-items:center;justify-content:center;width:100%;min-height:56px;border-radius:14px;font:inherit;font-size:18px;font-weight:700;border:2px solid var(--vert);background:var(--vert);color:var(--blanc);cursor:pointer;padding:10px 16px;text-align:center;touch-action:manipulation}
+.bouton.second{background:var(--blanc);color:var(--vert)}
+.bouton:disabled{opacity:.45;cursor:not-allowed}
+h1:focus,h2:focus{outline:none}
+.bouton:focus-visible,.nom:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid #E08A1E;outline-offset:2px}
+.espace{flex-grow:1}
+.noms{display:flex;flex-direction:column;gap:10px;list-style:none;margin:0;padding:0}
+.nom{width:100%;min-height:56px;text-align:left;font:inherit;font-size:18px;font-weight:600;background:var(--blanc);color:var(--encre);border:1px solid var(--ligne);border-radius:12px;padding:12px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.nom:disabled{background:#ECEFEE;color:#6B7773;cursor:not-allowed;font-weight:500}
+.nom .etat{font-size:14px;font-weight:600}
+.case{display:flex;gap:12px;align-items:flex-start;background:var(--blanc);border:1px solid var(--ligne);border-radius:12px;padding:14px;font-size:17px;cursor:pointer}
+.case input{width:26px;height:26px;margin:0;accent-color:var(--vert);flex-shrink:0}
+.cadre{position:relative;background:var(--blanc);border:2px dashed #8FA79F;border-radius:16px;height:230px;touch-action:none;overflow:hidden}
+.cadre canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.cadre .indice{position:absolute;left:0;right:0;bottom:12px;text-align:center;color:#7C8A86;font-size:14px;pointer-events:none}
+.code{font-size:30px;letter-spacing:.3em;text-transform:uppercase;text-align:center;width:100%;padding:12px;border:2px solid var(--ligne);border-radius:12px;font-family:ui-monospace,Menlo,Consolas,monospace}
+.coche{width:72px;height:72px;border-radius:50%;background:var(--vert);color:var(--blanc);display:flex;align-items:center;justify-content:center;margin:12px auto 0}
+.centre{text-align:center}
+details{background:var(--blanc);border:1px solid var(--ligne);border-radius:12px;padding:12px 16px;font-size:15px}
+summary{cursor:pointer;font-weight:600;color:var(--vert-f)}
+details p{margin-top:10px}
+.attente{display:flex;align-items:center;justify-content:center;gap:12px;color:var(--gris);padding:40px 0}
+.roue{width:28px;height:28px;border:4px solid var(--doux);border-top-color:var(--vert);border-radius:50%;animation:t 1s linear infinite}
+@keyframes t{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.roue{animation:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="marque"><div class="logo" aria-hidden="true">2A</div><div>2A Formation · Émargement</div></div>
+  <div class="sous" id="sousTitre">Feuille d'émargement de la demi-journée</div>
+</header>
+<main id="ecran" aria-live="polite">
+  <div class="attente"><div class="roue" aria-hidden="true"></div><span>Chargement…</span></div>
+</main>
+
+<template id="tNotice">
+  <details>
+    <summary>Notice complète sur vos données</summary>
+    <p>Cette signature atteste votre présence (justification de la réalisation de la formation, article R6313-3 du Code du travail). Le responsable du traitement est 2A Formation, représentée par Alexandre Bigot.</p>
+    <p>Sont enregistrés : votre civilité, votre nom et prénom, l'image de votre signature, l'heure de signature (heure du serveur) et des données techniques de preuve (adresse IP, type de navigateur, identifiant d'appareil chiffré). Aucune donnée biométrique n'est conservée : seulement l'image finale de la signature.</p>
+    <p>Les données sont hébergées dans l'Union européenne (Supabase). Elles ne sont communiquées qu'à l'établissement commanditaire, aux financeurs et aux organismes de contrôle habilités, et sont conservées 5 ans après la fin de la formation, puis supprimées.</p>
+    <p>Vous pouvez exercer vos droits d'accès, de rectification, de limitation et d'opposition en écrivant à 2aa.formation@gmail.com, et introduire une réclamation auprès de la CNIL (cnil.fr). Les signatures étant des pièces justificatives, elles ne peuvent pas être effacées avant la fin de la durée de conservation. Voir aussi l'article 14 du règlement intérieur.</p>
+  </details>
+</template>
+
+<script src="config.js"></script>
+<script>
+'use strict';
+(function () {
+  var CFG = window.APP_CONFIG || {};
+  var ecran = document.getElementById('ecran');
+  var sous = document.getElementById('sousTitre');
+  var etat = { acces: '', info: null, stagiaire: null };
+
+  // ---- Utilitaires --------------------------------------------------------
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]; }); }
+  function h(t) { return String(t || '').replace(/^0/, '').replace(':', 'h'); }
+  function periode(p) { return p === 'matin' ? 'Matin' : 'Après-midi'; }
+  function dateLongue(j) {
+    try { var s = new Date(j + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); return s.charAt(0).toUpperCase() + s.slice(1); }
+    catch (e) { return j; }
+  }
+  function afficher(html) { ecran.innerHTML = html; window.scrollTo(0, 0); var t = ecran.querySelector('h1,h2'); if (t) { t.setAttribute('tabindex', '-1'); t.focus({ preventScroll: true }); } }
+  function notice() { return document.getElementById('tNotice').innerHTML; }
+
+  // Identifiant d'appareil : tiré au hasard une fois, gardé sur ce téléphone (seule son empreinte est enregistrée)
+  var appareil = (function () {
+    var k = 'emg_appareil', v = null;
+    try { v = localStorage.getItem(k); } catch (e) {}
+    if (!v || v.length < 16) {
+      var b = new Uint8Array(16); (window.crypto || window.msCrypto).getRandomValues(b);
+      v = 'a' + Array.prototype.map.call(b, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+      try { localStorage.setItem(k, v); } catch (e) {}
+    }
+    return v;
+  })();
+
+  // Appel d'une fonction Supabase, sans compte (clé publique). Aucune file d'attente :
+  // une signature qui n'arrive pas au serveur n'existe pas.
+  function rpc(nom, args) {
+    var ctrl = window.AbortController ? new AbortController() : null;
+    var minuterie = setTimeout(function () { if (ctrl) ctrl.abort(); }, 20000);
+    return fetch(CFG.supabaseUrl + '/rest/v1/rpc/' + nom, {
+      method: 'POST', signal: ctrl ? ctrl.signal : undefined, cache: 'no-store', credentials: 'omit',
+      headers: { 'Content-Type': 'application/json', apikey: CFG.supabaseAnonKey, Authorization: 'Bearer ' + CFG.supabaseAnonKey },
+      body: JSON.stringify(args)
+    }).then(function (r) {
+      clearTimeout(minuterie);
+      if (!r.ok) return r.text().then(function () { throw { reseau: false, message: 'Le serveur a refusé la demande (' + r.status + ').' }; });
+      return r.json();
+    }, function () { clearTimeout(minuterie); throw { reseau: true }; });
+  }
+
+  function ecranErreur(msg, reessayer) {
+    afficher('<h1>Signature impossible</h1><div class="alerte" role="alert">' + esc(msg) + '</div>' +
+      '<p class="gris">Prévenez le formateur : il peut vous faire signer sur son téléphone ou sur la feuille papier.</p>' +
+      '<div class="espace"></div>' + (reessayer ? '<button class="bouton" id="bRe">Réessayer</button>' : ''));
+    var b = document.getElementById('bRe'); if (b) b.onclick = reessayer;
+  }
+  function ecranReseau(reessayer) {
+    ecranErreur('Pas de connexion : votre signature n\'a pas été envoyée. Vérifiez le réseau puis réessayez, ou signez la feuille papier auprès du formateur.', reessayer);
+  }
+  function attente(txt) { afficher('<div class="attente"><div class="roue" aria-hidden="true"></div><span>' + esc(txt) + '</span></div>'); }
+
+  // ---- Écran 0 : saisie du code court --------------------------------------
+  function ecranCode(msg) {
+    sous.textContent = 'Feuille d\'émargement de la demi-journée';
+    afficher('<h1>Code de la demi-journée</h1>' +
+      '<p class="gris">Tapez le code à 6 caractères affiché par le formateur.</p>' +
+      (msg ? '<div class="alerte" role="alert">' + esc(msg) + '</div>' : '') +
+      '<form id="fCode" autocomplete="off"><label for="iCode" class="gris petit">Code</label>' +
+      '<input id="iCode" class="code" inputmode="text" autocapitalize="characters" maxlength="6" required pattern="[A-Za-z0-9]{6}" aria-describedby="aideCode">' +
+      '<p id="aideCode" class="gris petit" style="margin-top:6px">Exemple : 7HCF4Z (pas de 0, O, 1, I ni L)</p>' +
+      '<div style="height:16px"></div><button class="bouton" type="submit">Continuer</button></form>');
+    var i = document.getElementById('iCode'); i.focus();
+    document.getElementById('fCode').onsubmit = function (e) {
+      e.preventDefault(); var c = i.value.trim().toUpperCase();
+      if (!/^[A-Z0-9]{6}$/.test(c)) { ecranCode('Le code fait 6 caractères.'); return; }
+      etat.acces = c; charger();
+    };
+  }
+
+  // ---- Chargement de la demi-journée ---------------------------------------
+  function charger() {
+    attente('Recherche de la demi-journée…');
+    rpc('emg_lire', { p_acces: etat.acces, p_appareil: appareil }).then(function (r) {
+      if (!r || !r.ok) {
+        if (r && r.erreur === 'code_inconnu' && etat.acces.length === 6) { ecranCode(r.message); return; }
+        ecranErreur((r && r.message) || 'Demi-journée introuvable.', r && r.erreur === 'trop_essais' ? charger : null); return;
+      }
+      etat.info = r; ecranArrivee();
+    }, function (e) { if (e && e.reseau) ecranReseau(charger); else ecranErreur(e.message, charger); });
+  }
+
+  // ---- Écran 1 : arrivée ----------------------------------------------------
+  function ecranArrivee() {
+    var r = etat.info;
+    sous.textContent = r.intitule + ' · ' + periode(r.periode);
+    afficher('<div class="carte"><h1>' + esc(r.intitule) + '</h1>' +
+      '<p class="gris">' + esc(dateLongue(r.jour)) + ' · ' + periode(r.periode) + ' ' + h(r.debut) + ' – ' + h(r.fin) + '</p>' +
+      '<p class="gris">' + esc(r.lieu) + '</p></div>' +
+      (r.appareil_deja_utilise ? '<div class="alerte" role="alert">Une signature a déjà été faite depuis ce téléphone pour cette demi-journée. Chacun signe sur son propre téléphone ; sinon, le formateur vous fait signer sur le sien.</div>' :
+      '<div><h2>Bonjour !</h2><p class="gris" style="margin-top:6px">Signez ici pour attester votre présence à cette demi-journée. Cela prend moins d\'une minute.</p></div>') +
+      '<div class="info">Nous enregistrons votre nom, l\'image de votre signature et l\'heure. Données conservées 5 ans, hébergées dans l\'Union européenne.</div>' +
+      notice() + '<div class="espace"></div>' +
+      (r.appareil_deja_utilise ? '' : '<button class="bouton" id="bGo">Commencer</button>') +
+      '<p class="gris petit centre">Pas de téléphone ? Le formateur vous fait signer sur le sien.</p>');
+    var b = document.getElementById('bGo'); if (b) b.onclick = ecranNom;
+  }
+
+  // ---- Écran 2 : choisir son nom -------------------------------------------
+  function ecranNom() {
+    var l = etat.info.stagiaires || [];
+    afficher('<h1>Choisissez votre nom</h1>' +
+      '<ul class="noms">' + l.map(function (s, i) {
+        return '<li><button class="nom" data-i="' + i + '"' + (s.signe ? ' disabled aria-label="' + esc(s.nom) + ', déjà signé"' : '') + '><span>' + esc(s.nom) + '</span>' +
+          (s.signe ? '<span class="etat">déjà signé</span>' : '<span aria-hidden="true">›</span>') + '</button></li>';
+      }).join('') + '</ul>' +
+      (l.length ? '' : '<div class="alerte">Aucun nom n\'est prévu pour cette demi-journée.</div>') +
+      '<div class="info">Votre nom n\'est pas dans la liste ? Prévenez le formateur : il vous ajoute sur place.</div>' +
+      '<button class="bouton second" id="bRet">Retour</button>');
+    ecran.querySelectorAll('.nom:not([disabled])').forEach(function (b) { b.onclick = function () { etat.stagiaire = l[+b.getAttribute('data-i')]; ecranSignature(); }; });
+    document.getElementById('bRet').onclick = ecranArrivee;
+  }
+
+  // ---- Écran 3 : cocher et signer ------------------------------------------
+  function ecranSignature() {
+    var s = etat.stagiaire;
+    var phrase = 'Je suis ' + s.nom + ' et je suis présent(e) à cette demi-journée.';
+    afficher('<h1>' + esc(s.nom) + '</h1>' +
+      '<label class="case"><input type="checkbox" id="cOk"><span>' + esc(phrase) + '</span></label>' +
+      '<h2 id="tSig">Signez avec le doigt dans le cadre</h2>' +
+      '<div class="cadre" id="cadre"><canvas id="toile" role="img" aria-labelledby="tSig"></canvas><div class="indice" id="indice">Signez ici</div></div>' +
+      '<p class="alerte" id="mSig" role="alert" hidden></p>' +
+      '<button class="bouton second" id="bEff">Recommencer</button>' +
+      '<div class="espace"></div>' +
+      '<button class="bouton" id="bVal" disabled>Valider ma signature</button>' +
+      '<button class="bouton second" id="bAutre">Ce n\'est pas moi</button>');
+    var pad = signaturePad(document.getElementById('toile'), document.getElementById('indice'), majBouton);
+    var c = document.getElementById('cOk'), bVal = document.getElementById('bVal'), m = document.getElementById('mSig');
+    function majBouton() { bVal.disabled = !(c.checked && pad.valide()); }
+    c.onchange = majBouton;
+    document.getElementById('bEff').onclick = function () { pad.effacer(); m.hidden = true; majBouton(); };
+    document.getElementById('bAutre').onclick = ecranNom;
+    bVal.onclick = function () {
+      if (!c.checked) { m.textContent = 'Cochez la case de confirmation.'; m.hidden = false; return; }
+      if (!pad.valide()) { m.textContent = 'Signature trop courte : signez comme sur papier.'; m.hidden = false; return; }
+      envoyer(pad.image());
+    };
+  }
+
+  function envoyer(image) {
+    var s = etat.stagiaire;
+    attente('Enregistrement de votre signature…');
+    rpc('emg_signer', { p_acces: etat.acces, p_stagiaire: s.id, p_image: image, p_consentement: true, p_appareil: appareil, p_heure_appareil: new Date().toISOString() })
+      .then(function (r) {
+        if (r && r.ok) { ecranRecu(r); return; }
+        var msg = (r && r.message) || 'Signature refusée.';
+        if (r && (r.erreur === 'image' || r.erreur === 'consentement')) { ecranSignature(); var m = document.getElementById('mSig'); m.textContent = msg; m.hidden = false; return; }
+        ecranErreur(msg, null);
+      }, function (e) { if (e && e.reseau) ecranReseau(function () { envoyer(image); }); else ecranErreur(e.message, null); });
+  }
+
+  // ---- Écran 4 : reçu -------------------------------------------------------
+  function ecranRecu(r) {
+    afficher('<div class="coche" aria-hidden="true"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>' +
+      '<h1 class="centre">Signature enregistrée</h1>' +
+      '<div class="carte centre"><p><strong>' + esc(r.nom) + '</strong></p><p class="gris">le ' + esc(r.heure_paris) + ' (heure du serveur)</p></div>' +
+      '<p class="gris centre">Vous pouvez fermer cette page. En cas d\'erreur, prévenez le formateur.</p>');
+  }
+
+  // ---- Zone de signature (image finale seulement, pas de tracé conservé) ----
+  function signaturePad(cv, indice, change) {
+    var W = 600, H = 230, ctx = cv.getContext('2d'), traits = [], courant = null, longueur = 0, minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+    cv.width = W; cv.height = H;
+    function fond() { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.lineWidth = 3.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#111'; }
+    fond();
+    function pos(e) { var r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height }; }
+    function borne(p) { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); }
+    cv.addEventListener('pointerdown', function (e) { e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (x) {} courant = pos(e); borne(courant); indice.hidden = true; ctx.beginPath(); ctx.moveTo(courant.x, courant.y); ctx.lineTo(courant.x + 0.1, courant.y); ctx.stroke(); });
+    cv.addEventListener('pointermove', function (e) { if (!courant) return; e.preventDefault(); var p = pos(e); ctx.beginPath(); ctx.moveTo(courant.x, courant.y); ctx.lineTo(p.x, p.y); ctx.stroke(); longueur += Math.hypot(p.x - courant.x, p.y - courant.y); borne(p); courant = p; });
+    function fin() { if (courant) { courant = null; traits.push(1); change(); } }
+    cv.addEventListener('pointerup', fin); cv.addEventListener('pointercancel', fin); cv.addEventListener('pointerleave', fin);
+    return {
+      valide: function () { return longueur > 120 && (maxX - minX) > 40; },   // ni vide ni réduite à un point
+      effacer: function () { fond(); traits = []; longueur = 0; minX = minY = 1e9; maxX = maxY = -1e9; indice.hidden = false; },
+      image: function () { return cv.toDataURL('image/png').replace(/^data:image\/png;base64,/, ''); }
+    };
+  }
+
+  // ---- Démarrage : jeton du QR dans l'adresse (#t=…), sinon code court -----
+  if (!CFG.supabaseUrl) { ecranErreur('Configuration manquante.', null); return; }
+  var m = /(?:^|[#&])t=([A-Za-z0-9_-]{20,80})/.exec(location.hash) || /[?&]c=([A-Za-z0-9]{6})/.exec(location.search);
+  if (m) { etat.acces = m[1]; charger(); }
+  else ecranCode();
+})();
+</script>
+</body>
+</html>
