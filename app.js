@@ -133,6 +133,7 @@ async function boot() {
     await loadNumeros(); await loadCampagne(); await loadTravail(); await loadDepenses(); await loadReglages(); syncChip(); flush();
     status(''); initViews();
     if (typeof EMG !== 'undefined') EMG.init({ sb, toast, esc, $, apresChargement: () => { const v = curView(); if (v === 'accueil') renderMonJour(); if (v === 'formations' && !fOpen) renderFormations(); } }); // émargement (emargement.js) : fiche formation + page #emargement
+    if (typeof BIL !== 'undefined') BIL.init({ sb, toast, esc, $ }); // bilans de formation (bilans.js) : sous-onglet « Bilans » de la fiche formation
     route();
     sb.channel('appels').on('postgres_changes', { event: '*', schema: 'public', table: 'appels' }, p => {
       if (p.eventType === 'DELETE') delete A[p.old.etab_id]; else A[p.new.etab_id] = fromRow(p.new);
@@ -678,7 +679,7 @@ const fRecTotal = id => fRecs(id).reduce((s, d) => s + (+d.montant || 0), 0);
 const fTotal = id => fDeps(id).reduce((s, d) => s + (+d.montant || 0), 0);
 function fTabsHtml(f) {
   const it = fItems(f.id), d = it.filter(i => i.fait).length, n = fDeps(f.id).length;
-  const T = [['infos', 'Infos', ''], ['etapes', 'Étapes', d + '/' + it.length], ['emarg', 'Émargement', typeof EMG !== 'undefined' && EMG.aujourdhui(f.code_session) ? 'aujourd’hui' : ''], ['logement', 'Logement', f.logement_statut === 'Réservé' ? '✓' : ''], ['depenses', 'Dépenses', n ? eur(fTotal(f.id)).replace(/\s?€/, ' €') : '']];
+  const T = [['infos', 'Infos', ''], ['etapes', 'Étapes', d + '/' + it.length], ['emarg', 'Émargement', typeof EMG !== 'undefined' && EMG.aujourdhui(f.code_session) ? 'aujourd’hui' : ''], ['bilans', 'Bilans', ''], ['logement', 'Logement', f.logement_statut === 'Réservé' ? '✓' : ''], ['depenses', 'Dépenses', n ? eur(fTotal(f.id)).replace(/\s?€/, ' €') : '']];
   return '<div class="row seg ftabs" id="f_tabs">' + T.map(([k, l, x]) => '<button type="button" data-ft-go="' + k + '" aria-pressed="' + (fTab === k) + '">' + l + (x ? ' <span class="num">' + esc(x) + '</span>' : '') + '</button>').join('') + '</div>';
 }
 function fTabShow() {
@@ -1157,6 +1158,13 @@ function fEmg(f) {
   if (!f.code_session) { el.innerHTML = '<div class="panel muted">Cette formation n’est pas encore reliée à un émargement. Claude prépare l’émargement depuis le classeur des formations à la demande d’Alexandre, puis inscrit le code de la session dans l’onglet Infos.</div>'; return; }
   EMG.monter(el, f.code_session);
 }
+// sous-onglet « Bilans » de la fiche formation (bilans.js)
+function fBil(f) {
+  const el = $('f_bil'); if (!el) return;
+  if (typeof BIL === 'undefined') { el.innerHTML = '<div class="panel muted">Bilans indisponibles : rechargez la page.</div>'; return; }
+  if (!f.code_session) { el.innerHTML = '<div class="panel muted">Cette formation n’est pas encore reliée à une session (code du classeur dans l’onglet Infos) : les bilans se préparent avec l’émargement.</div>'; return; }
+  BIL.monter(el, f.code_session);
+}
 // à l'ouverture d'une fiche : un jour de formation, on arrive directement sur l'émargement
 const fTabDefaut = id => { const f = FO.find(x => x.id === id); return f && typeof EMG !== 'undefined' && EMG.aujourdhui(f.code_session) ? 'emarg' : 'infos'; };
 function fCardRender() {
@@ -1180,10 +1188,11 @@ function fCardRender() {
       '<div class="small" id="f_lgd">' + lgDepHtml(f) + '</div></div>' +
     '<div data-ft="depenses" class="ftab" id="f_dep"></div>' +
     '<div data-ft="emarg" class="ftab" id="f_emg"></div>' +
+    '<div data-ft="bilans" class="ftab" id="f_bil"></div>' +
     '</div>';
-  $('fItems').innerHTML = fItemsHtml(f); renderDepenses(f); fTabShow(); if (fTab === 'emarg') fEmg(f);
-  $('fCard').onclick = e => { const g = e.target.closest('[data-ft-go]'); if (g) { fTab = g.dataset.ftGo; fTabShow(); if (fTab === 'emarg') fEmg(f); else if (typeof EMG !== 'undefined') EMG.quitter(); } };
-  $('f_close').onclick = () => { if (typeof EMG !== 'undefined') EMG.quitter(); fOpen = null; renderFormations(); };
+  $('fItems').innerHTML = fItemsHtml(f); renderDepenses(f); fTabShow(); if (fTab === 'emarg') fEmg(f); if (fTab === 'bilans') fBil(f);
+  $('fCard').onclick = e => { const g = e.target.closest('[data-ft-go]'); if (g) { fTab = g.dataset.ftGo; fTabShow(); if (fTab === 'emarg') fEmg(f); else if (typeof EMG !== 'undefined') EMG.quitter(); if (fTab === 'bilans') fBil(f); else if (typeof BIL !== 'undefined') BIL.quitter(); } };
+  $('f_close').onclick = () => { if (typeof EMG !== 'undefined') EMG.quitter(); if (typeof BIL !== 'undefined') BIL.quitter(); fOpen = null; renderFormations(); };
   const lgSave = async msg => { f.logement_infos = $('f_lgi').value.trim(); f.logement_par = me.prenom; f.maj = nowIso(); $('f_lgc').innerHTML = lgChip(f); $('f_lgp').textContent = 'Mis à jour par ' + me.prenom; if (await persist({ table: 'formations', op: 'upsert', row: { ...f } }) && msg) toast(msg); };
   $('f_lgs').onclick = e => { const b = e.target.closest('[data-lg]'); if (!b) return; f.logement_statut = b.dataset.lg; $('f_lgs').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); lgSave(f.logement_statut === 'Réservé' ? 'Logement noté comme réservé' : 'Logement : ' + f.logement_statut.toLowerCase()); };
   $('f_lgi').onchange = () => lgSave('Infos du logement enregistrées');

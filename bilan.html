@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#2E5B4E">
+<meta name="referrer" content="no-referrer">
+<title>Questionnaire – 2A Formation</title>
+<link rel="icon" href="icone-192.png">
+<style>
+/* Page stagiaire : une colonne, gros boutons, contraste fort, aucun compte */
+:root{--vert:#2E5B4E;--vert-f:#1F4238;--fond:#F6F7F5;--encre:#1C2B27;--gris:#4F5D59;--ligne:#C9D3CF;--doux:#E4EEEA;--rouge:#A8323C;--blanc:#fff}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--fond);color:var(--encre);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:17px;line-height:1.45}
+header{background:var(--vert);color:var(--blanc);padding:calc(16px + env(safe-area-inset-top,0px)) 20px 16px}
+.marque{display:flex;align-items:center;gap:10px;font-weight:600;font-size:16px}
+.logo{width:34px;height:34px;border-radius:9px;background:var(--blanc);color:var(--vert);font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sous{font-size:14px;color:#DCEAE4;margin-top:4px}
+main{max-width:520px;margin:0 auto;padding:22px 18px calc(28px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:18px;min-height:calc(100vh - 80px)}
+h1{font-size:22px;line-height:1.25;margin:0}
+h2{font-size:19px;margin:0}
+p{margin:0}
+.carte{background:var(--blanc);border:1px solid var(--ligne);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:6px}
+.gris{color:var(--gris)}
+.petit{font-size:15px}
+.info{background:var(--doux);border-radius:12px;padding:14px 16px;font-size:15px}
+.info a,.lien{color:var(--vert-f);font-weight:600}
+.alerte{background:#FBEDEE;border:1px solid #E6B8BC;color:#6E1F26;border-radius:12px;padding:14px 16px;font-size:16px}
+.bouton{display:flex;align-items:center;justify-content:center;width:100%;min-height:56px;border-radius:14px;font:inherit;font-size:18px;font-weight:700;border:2px solid var(--vert);background:var(--vert);color:var(--blanc);cursor:pointer;padding:10px 16px;text-align:center;touch-action:manipulation}
+.bouton.second{background:var(--blanc);color:var(--vert)}
+.bouton:disabled{opacity:.45;cursor:not-allowed}
+h1:focus,h2:focus{outline:none}
+.bouton:focus-visible,.nom:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid #E08A1E;outline-offset:2px}
+.espace{flex-grow:1}
+.noms{display:flex;flex-direction:column;gap:10px;list-style:none;margin:0;padding:0}
+.nom{width:100%;min-height:56px;text-align:left;font:inherit;font-size:18px;font-weight:600;background:var(--blanc);color:var(--encre);border:1px solid var(--ligne);border-radius:12px;padding:12px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.nom:disabled{background:#ECEFEE;color:#6B7773;cursor:not-allowed;font-weight:500}
+.nom .etat{font-size:14px;font-weight:600}
+.case{display:flex;gap:12px;align-items:flex-start;background:var(--blanc);border:1px solid var(--ligne);border-radius:12px;padding:14px;font-size:17px;cursor:pointer}
+.case input{width:26px;height:26px;margin:0;accent-color:var(--vert);flex-shrink:0}
+.cadre{position:relative;background:var(--blanc);border:2px dashed #8FA79F;border-radius:16px;height:230px;touch-action:none;overflow:hidden}
+.cadre canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.cadre .indice{position:absolute;left:0;right:0;bottom:12px;text-align:center;color:#7C8A86;font-size:14px;pointer-events:none}
+.code{font-size:30px;letter-spacing:.3em;text-transform:uppercase;text-align:center;width:100%;padding:12px;border:2px solid var(--ligne);border-radius:12px;font-family:ui-monospace,Menlo,Consolas,monospace}
+.coche{width:72px;height:72px;border-radius:50%;background:var(--vert);color:var(--blanc);display:flex;align-items:center;justify-content:center;margin:12px auto 0}
+.centre{text-align:center}
+details{background:var(--blanc);border:1px solid var(--ligne);border-radius:12px;padding:12px 16px;font-size:15px}
+summary{cursor:pointer;font-weight:600;color:var(--vert-f)}
+details p{margin-top:10px}
+.attente{display:flex;align-items:center;justify-content:center;gap:12px;color:var(--gris);padding:40px 0}
+.roue{width:28px;height:28px;border:4px solid var(--doux);border-top-color:var(--vert);border-radius:50%;animation:t 1s linear infinite}
+@keyframes t{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.roue{animation:none}}
+.progres{height:8px;background:var(--doux);border-radius:8px;overflow:hidden}
+.progres div{height:100%;background:var(--vert);transition:width .2s}
+.nav{display:flex;gap:10px}
+.nav .bouton{flex:1}
+input[type=email]{width:100%;box-sizing:border-box;font:inherit;font-size:17px;padding:12px;border:2px solid var(--ligne);border-radius:12px}
+</style>
+</head>
+<body>
+<header>
+  <div class="marque"><div class="logo" aria-hidden="true">2A</div><div>2A Formation · Questionnaire</div></div>
+  <div class="sous" id="sousTitre">Bilan de la formation</div>
+</header>
+<main id="ecran" aria-live="polite">
+  <div class="attente"><div class="roue" aria-hidden="true"></div><span>Chargement…</span></div>
+</main>
+
+<template id="tNotice">
+  <details>
+    <summary>Notice complète sur vos données</summary>
+    <p>Ce questionnaire sert à adapter la formation, à évaluer l'atteinte de ses objectifs et à recueillir votre avis, comme l'exige la certification Qualiopi (article R6316-1 du Code du travail). Le responsable du traitement est 2A Formation, représentée par Alexandre Bigot.</p>
+    <p>Positionnement : vos réponses sont enregistrées avec votre nom, pour que les formateurs adaptent la formation. Évaluation de fin de formation : vos réponses sont enregistrées sans votre nom (le nom est facultatif) ; aucune adresse IP n'est conservée avec elles. L'adresse e-mail que vous pouvez laisser pour le questionnaire envoyé trois mois plus tard est enregistrée à part de vos réponses, sans lien avec elles, et effacée après cet envoi.</p>
+    <p>Les données sont hébergées dans l'Union européenne (Supabase). Les résultats sont communiqués de façon globale à l'établissement commanditaire et peuvent être présentés aux organismes de contrôle habilités ; elles sont conservées 5 ans après la fin de la formation, puis supprimées.</p>
+    <p>Vous pouvez exercer vos droits d'accès, de rectification, de limitation et d'opposition en écrivant à 2aa.formation@gmail.com, et introduire une réclamation auprès de la CNIL (cnil.fr). Voir aussi l'article 14 du règlement intérieur.</p>
+  </details>
+</template>
+
+<script src="config.js"></script>
+<script src="questionnaire.js?v=19"></script>
+<script>
+'use strict';
+(function () {
+  var CFG = window.APP_CONFIG || {};
+  var ecran = document.getElementById('ecran');
+  var sous = document.getElementById('sousTitre');
+  var etat = { acces: '', info: null, stagiaire: null, q: null, page: 0, reponses: null };
+  var TYPES = { positionnement: 'Positionnement · avant la formation', chaud: 'Votre avis sur la formation', froid_stagiaire: 'Et trois mois après ?', froid_responsable: 'Votre regard sur la formation' };
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]; }); }
+  function afficher(html) { ecran.innerHTML = html; window.scrollTo(0, 0); var t = ecran.querySelector('h1'); if (t) { t.setAttribute('tabindex', '-1'); t.focus({ preventScroll: true }); } }
+  function notice() { return document.getElementById('tNotice').innerHTML; }
+  var appareil = (function () {
+    var k = 'emg_appareil', v = null;
+    try { v = localStorage.getItem(k); } catch (e) {}
+    if (!v || v.length < 16) {
+      var b = new Uint8Array(16); (window.crypto || window.msCrypto).getRandomValues(b);
+      v = 'a' + Array.prototype.map.call(b, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+      try { localStorage.setItem(k, v); } catch (e) {}
+    }
+    return v;
+  })();
+  // Aucune file d'attente : une réponse qui n'arrive pas au serveur n'existe pas (pas de reçu).
+  function rpc(nom, args) {
+    var ctrl = window.AbortController ? new AbortController() : null;
+    var minuterie = setTimeout(function () { if (ctrl) ctrl.abort(); }, 20000);
+    return fetch(CFG.supabaseUrl + '/rest/v1/rpc/' + nom, {
+      method: 'POST', signal: ctrl ? ctrl.signal : undefined, cache: 'no-store', credentials: 'omit',
+      headers: { 'Content-Type': 'application/json', apikey: CFG.supabaseAnonKey, Authorization: 'Bearer ' + CFG.supabaseAnonKey },
+      body: JSON.stringify(args)
+    }).then(function (r) {
+      clearTimeout(minuterie);
+      if (!r.ok) return r.text().then(function () { throw { reseau: false, message: 'Le serveur a refusé la demande (' + r.status + ').' }; });
+      return r.json();
+    }, function () { clearTimeout(minuterie); throw { reseau: true }; });
+  }
+  function ecranErreur(msg, reessayer) {
+    afficher('<h1>Questionnaire indisponible</h1><div class="alerte" role="alert">' + esc(msg) + '</div>' +
+      '<p class="gris">Prévenez le formateur : il vous donne la version papier.</p><div class="espace"></div>' +
+      (reessayer ? '<button class="bouton" id="bRe">Réessayer</button>' : ''));
+    var b = document.getElementById('bRe'); if (b) b.onclick = reessayer;
+  }
+  function attente(t) { afficher('<div class="attente"><div class="roue" aria-hidden="true"></div><span>' + esc(t) + '</span></div>'); }
+
+  function ecranCode(msg) {
+    afficher('<h1>Code du questionnaire</h1><p class="gris">Tapez le code à 6 caractères affiché par le formateur.</p>' +
+      (msg ? '<div class="alerte" role="alert">' + esc(msg) + '</div>' : '') +
+      '<form id="fCode" autocomplete="off"><label for="iCode" class="gris petit">Code</label>' +
+      '<input id="iCode" class="code" inputmode="text" autocapitalize="characters" maxlength="6" required pattern="[A-Za-z0-9]{6}">' +
+      '<p class="gris petit" style="margin-top:6px">Exemple : 7HCF4Z (pas de 0, O, 1, I ni L)</p>' +
+      '<div style="height:16px"></div><button class="bouton" type="submit">Continuer</button></form>');
+    var i = document.getElementById('iCode'); i.focus();
+    document.getElementById('fCode').onsubmit = function (e) {
+      e.preventDefault(); var c = i.value.trim().toUpperCase();
+      if (!/^[A-Z0-9]{6}$/.test(c)) { ecranCode('Le code fait 6 caractères.'); return; }
+      etat.acces = c; charger();
+    };
+  }
+  function charger() {
+    attente('Ouverture du questionnaire…');
+    rpc('bil_lire', { p_acces: etat.acces, p_appareil: appareil }).then(function (r) {
+      if (!r || !r.ok) {
+        if (r && r.erreur === 'code_inconnu' && etat.acces.length === 6) { ecranCode(r.message); return; }
+        ecranErreur((r && r.message) || 'Questionnaire introuvable.', r && r.erreur === 'trop_essais' ? charger : null); return;
+      }
+      etat.info = r; ecranArrivee();
+    }, function (e) { if (e && e.reseau) ecranErreur('Pas de connexion. Vérifiez le réseau puis réessayez.', charger); else ecranErreur(e.message, charger); });
+  }
+  function ecranArrivee() {
+    var r = etat.info, m = r.modele.contenu;
+    sous.textContent = r.intitule;
+    afficher('<div class="carte"><p class="gris petit" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700">' + esc(TYPES[r.type] || r.modele.titre) + '</p><h1>' + esc(r.intitule) + '</h1>' +
+      '<p class="gris">' + esc(r.dates) + (r.duree ? ' · ' + esc(r.duree) : '') + '</p>' + (r.formateurs ? '<p class="gris">Formateurs : ' + esc(r.formateurs) + '</p>' : '') + '</div>' +
+      (r.deja ? '<div class="alerte" role="alert">Ce questionnaire a déjà été rempli depuis ce téléphone. Chacun répond sur son propre téléphone ; sinon, demandez la version papier.</div>' :
+        '<div><h2>Bonjour !</h2><p class="gris" style="margin-top:6px">' + esc(m.intro || '') + '</p>' + (m.consigne ? '<p class="gris" style="margin-top:6px">' + esc(m.consigne) + '</p>' : '') + '</div>') +
+      '<div class="info">' + (r.type === 'positionnement' ? 'Vos réponses sont enregistrées avec votre nom et lues par les formateurs.' : 'Vos réponses sont enregistrées sans votre nom (sauf si vous l\'écrivez à la fin). Aucune adresse IP n\'est conservée.') + ' Données hébergées dans l\'Union européenne, conservées 5 ans.</div>' +
+      notice() + '<div class="espace"></div>' + (r.deja ? '' : '<button class="bouton" id="bGo">Commencer</button>') +
+      '<p class="gris petit centre">Pas de téléphone ? Le formateur vous donne la version papier.</p>');
+    var b = document.getElementById('bGo'); if (b) b.onclick = r.type === 'positionnement' ? ecranNom : function () { etat.page = 0; ecranQuestions(); };
+  }
+  function ecranNom() {
+    var l = etat.info.stagiaires || [];
+    afficher('<h1>Choisissez votre nom</h1><ul class="noms">' + l.map(function (s, i) {
+      return '<li><button class="nom" data-i="' + i + '"' + (s.repondu ? ' disabled' : '') + '><span>' + esc(s.nom) + '</span>' + (s.repondu ? '<span class="etat">déjà répondu</span>' : '<span aria-hidden="true">›</span>') + '</button></li>';
+    }).join('') + '</ul><div class="info">Votre nom n\'est pas dans la liste ? Prévenez le formateur.</div><button class="bouton second" id="bRet">Retour</button>');
+    ecran.querySelectorAll('.nom:not([disabled])').forEach(function (b) { b.onclick = function () { etat.stagiaire = l[+b.getAttribute('data-i')]; etat.page = 0; ecranQuestions(); }; });
+    document.getElementById('bRet').onclick = ecranArrivee;
+  }
+  function ecranQuestions() {
+    var r = etat.info, valeurs = etat.reponses || {};
+    afficher('<div><p class="gris petit">' + (etat.stagiaire ? esc(etat.stagiaire.nom) + ' · ' : '') + 'Partie ' + (etat.page + 1) + ' sur <span id="nbP"></span></p><div class="progres" aria-hidden="true"><div id="barre"></div></div></div>' +
+      '<h1 class="petit gris" style="position:absolute;left:-9999px">Questionnaire</h1><div id="qz"></div><div class="espace"></div>' +
+      '<div class="nav"><button class="bouton second" id="bPrec">Précédent</button><button class="bouton" id="bSuiv">Suivant</button></div>');
+    etat.q = QUEST.rendre(document.getElementById('qz'), r.modele.contenu, r.objectifs, { pagine: true, valeurs: valeurs });
+    var n = etat.q.nbSections, dernier = etat.page === n - 1;
+    etat.q.montrer(etat.page);
+    document.getElementById('nbP').textContent = n;
+    document.getElementById('barre').style.width = Math.round(100 * (etat.page + 1) / (n + (r.type === 'chaud' ? 1 : 0))) + '%';
+    var bp = document.getElementById('bPrec'), bs = document.getElementById('bSuiv');
+    bp.textContent = etat.page === 0 ? (r.type === 'positionnement' ? 'Changer de nom' : 'Retour') : 'Précédent';
+    bp.onclick = function () { etat.reponses = etat.q.lire(); if (etat.page === 0) { etat.q = null; if (r.type === 'positionnement') ecranNom(); else ecranArrivee(); } else { etat.page--; ecranQuestions(); } };
+    bs.textContent = dernier ? (r.type === 'chaud' ? 'Suivant' : 'Envoyer mes réponses') : 'Suivant';
+    bs.onclick = function () {
+      etat.reponses = etat.q.lire();
+      if (!dernier) { etat.page++; ecranQuestions(); return; }
+      if (r.type === 'chaud') ecranContact(); else envoyer(null);
+    };
+  }
+  function ecranContact() {
+    afficher('<h1>Et dans trois mois ?</h1><p class="gris">Nous envoyons un court questionnaire environ trois mois après la formation, pour savoir ce qu\'elle a changé dans votre pratique. Pour le recevoir, laissez votre adresse (facultatif).</p>' +
+      '<label class="gris petit" for="iMail">Votre adresse e-mail</label><input type="email" id="iMail" autocomplete="email" inputmode="email" maxlength="200" placeholder="prenom.nom@exemple.fr">' +
+      '<div class="info">Votre adresse est enregistrée à part de vos réponses, sans lien avec elles. Elle sert une seule fois, puis elle est effacée.</div>' +
+      '<p class="alerte" id="mMail" role="alert" hidden></p><div class="espace"></div>' +
+      '<button class="bouton" id="bEnv">Envoyer mes réponses</button><button class="bouton second" id="bPrec">Précédent</button>');
+    document.getElementById('bPrec').onclick = function () { etat.page = etat.q.nbSections - 1; ecranQuestions(); };
+    document.getElementById('bEnv').onclick = function () {
+      var m = document.getElementById('iMail').value.trim(), msg = document.getElementById('mMail');
+      if (m && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m)) { msg.textContent = 'Adresse invalide : corrigez-la ou laissez la case vide.'; msg.hidden = false; return; }
+      envoyer(m || null);
+    };
+  }
+  function envoyer(email) {
+    var r = etat.info;
+    attente('Enregistrement de vos réponses…');
+    rpc('bil_repondre', { p_acces: etat.acces, p_stagiaire: r.type === 'positionnement' ? etat.stagiaire.id : null, p_contenu: etat.reponses || {}, p_appareil: appareil, p_email: email })
+      .then(function (x) {
+        if (x && x.ok) { ecranRecu(x, email); return; }
+        if (x && x.erreur === 'email') { ecranContact(); var m = document.getElementById('mMail'); m.textContent = x.message; m.hidden = false; return; }
+        ecranErreur((x && x.message) || 'Réponses refusées.', null);
+      }, function (e) { if (e && e.reseau) ecranErreur('Pas de connexion : vos réponses n\'ont pas été envoyées. Vérifiez le réseau puis réessayez.', function () { envoyer(email); }); else ecranErreur(e.message, null); });
+  }
+  function ecranRecu(x, email) {
+    afficher('<div class="coche" aria-hidden="true"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>' +
+      '<h1 class="centre">Merci, vos réponses sont enregistrées</h1><div class="carte centre">' + (x.nom ? '<p><strong>' + esc(x.nom) + '</strong></p>' : '') + '<p class="gris">le ' + esc(x.heure_paris) + ' (heure du serveur)</p>' +
+      (email ? '<p class="gris">Vous recevrez le questionnaire dans environ trois mois.</p>' : '') + '</div>' +
+      '<div class="info">Une difficulté, une réclamation ? Parlez-en aux formateurs ou écrivez à 2aa.formation@gmail.com. Nous vous répondrons.</div>' +
+      '<p class="gris centre">Vous pouvez fermer cette page.</p>');
+  }
+  if (!CFG.supabaseUrl) { ecranErreur('Configuration manquante.', null); return; }
+  var m = /(?:^|[#&])t=([A-Za-z0-9_-]{20,80})/.exec(location.hash) || /[?&]c=([A-Za-z0-9]{6})/.exec(location.search);
+  if (m) { etat.acces = m[1]; charger(); } else ecranCode();
+})();
+</script>
+</body>
+</html>
