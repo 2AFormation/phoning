@@ -132,7 +132,7 @@ async function boot() {
     CLI = cli; inf.forEach(i => INFOS[i.cle] = i.valeur);
     await loadNumeros(); await loadCampagne(); await loadTravail(); await loadDepenses(); await loadReglages(); syncChip(); flush();
     status(''); initViews();
-    if (typeof EMG !== 'undefined') EMG.init({ sb, toast, esc, $ }); // onglet Émargement (emargement.js), visible des seuls formateurs
+    if (typeof EMG !== 'undefined') EMG.init({ sb, toast, esc, $, apresChargement: () => { const v = curView(); if (v === 'accueil') renderMonJour(); if (v === 'formations' && !fOpen) renderFormations(); } }); // émargement (emargement.js) : fiche formation + page #emargement
     route();
     sb.channel('appels').on('postgres_changes', { event: '*', schema: 'public', table: 'appels' }, p => {
       if (p.eventType === 'DELETE') delete A[p.old.etab_id]; else A[p.new.etab_id] = fromRow(p.new);
@@ -164,10 +164,17 @@ function route() {
   if (v !== 'taches') tNew.clear();
   if (v === 'carte') drawMap(); if (v === 'accueil') renderMonJour(); if (v === 'bilan') renderBilan(); if (v === 'campagne') renderCampagne();
   if (v === 'taches') renderTaches(); if (v === 'clients') renderClients(); if (v === 'formations') renderFormations(); if (v === 'notes') renderNotes();
-  if (typeof EMG !== 'undefined') { if (v === 'emargement') EMG.afficher(); else EMG.quitter(); } // onglet Émargement (emargement.js)
+  if (typeof EMG !== 'undefined') { if (v === 'emargement') emgRoute(); else EMG.quitter(); } // émargement (emargement.js)
   updateBadge(); window.scrollTo(0, 0);
 }
 addEventListener('hashchange', () => { if (!recovering) route(); });
+// #emargement (notification « pensez à clôturer », lien « Tous les émargements ») : ouvre la formation du jour si elle existe
+async function emgRoute() {
+  await EMG.charger();
+  const f = FO.find(x => x.code_session && EMG.aujourdhui(x.code_session));
+  if (f && curView() === 'emargement' && !sessionStorage.getItem('emg_liste')) { fOpen = f.id; fTab = 'emarg'; location.replace('#formations'); renderFormations(); fCardRender(); return; }
+  sessionStorage.removeItem('emg_liste'); EMG.afficher();
+}
 function refreshCurrent() { const v = curView(); updateBadge(); if (v === 'accueil') renderMonJour(); if (v === 'bilan') renderBilan(); if (v === 'carte') drawMap(); if (v === 'seance' && !Q.length) { poolInfo(); nxInfo(); } if (v === 'campagne' && !kOpen) renderCampagne(); if (v === 'taches' && !tOpen) renderTaches(); if (v === 'clients' && cOpen === null) renderClients(); if (v === 'formations' && !fOpen) renderFormations(); if (v === 'notes') renderNotes(); }
 
 // ---------- accueil
@@ -671,7 +678,7 @@ const fRecTotal = id => fRecs(id).reduce((s, d) => s + (+d.montant || 0), 0);
 const fTotal = id => fDeps(id).reduce((s, d) => s + (+d.montant || 0), 0);
 function fTabsHtml(f) {
   const it = fItems(f.id), d = it.filter(i => i.fait).length, n = fDeps(f.id).length;
-  const T = [['infos', 'Infos', ''], ['etapes', 'Étapes', d + '/' + it.length], ['logement', 'Logement', f.logement_statut === 'Réservé' ? '✓' : ''], ['depenses', 'Dépenses', n ? eur(fTotal(f.id)).replace(/\s?€/, ' €') : '']];
+  const T = [['infos', 'Infos', ''], ['etapes', 'Étapes', d + '/' + it.length], ['emarg', 'Émargement', typeof EMG !== 'undefined' && EMG.aujourdhui(f.code_session) ? 'aujourd’hui' : ''], ['logement', 'Logement', f.logement_statut === 'Réservé' ? '✓' : ''], ['depenses', 'Dépenses', n ? eur(fTotal(f.id)).replace(/\s?€/, ' €') : '']];
   return '<div class="row seg ftabs" id="f_tabs">' + T.map(([k, l, x]) => '<button type="button" data-ft-go="' + k + '" aria-pressed="' + (fTab === k) + '">' + l + (x ? ' <span class="num">' + esc(x) + '</span>' : '') + '</button>').join('') + '</div>';
 }
 function fTabShow() {
@@ -1125,13 +1132,14 @@ function fDupDialog(f) {
 
 function fBlock(f) {
   const it = fItems(f.id), d = it.filter(i => i.fait).length, nx = fNext(f);
-  return '<div class="panel"><div class="row" style="justify-content:space-between"><h2>' + esc(f.intitule) + '</h2><div class="row" style="gap:6px">' + lgChip(f) + '<span class="chip">' + esc(f.statut) + '</span></div></div><div class="muted">' + esc([f.client, fDates(f), f.lieu].filter(Boolean).join(' · ')) + (f.responsable ? ' · Responsable : ' + esc(f.responsable) : '') + '</div>' +
+  return '<div class="panel"><div class="row" style="justify-content:space-between"><h2>' + esc(f.intitule) + '</h2><div class="row" style="gap:6px">' + (typeof EMG !== 'undefined' && EMG.aujourdhui(f.code_session) ? '<span class="chip soon">Émargement aujourd’hui</span>' : '') + lgChip(f) + '<span class="chip">' + esc(f.statut) + '</span></div></div><div class="muted">' + esc([f.client, fDates(f), f.lieu].filter(Boolean).join(' · ')) + (f.responsable ? ' · Responsable : ' + esc(f.responsable) : '') + '</div>' +
     remLine(f) + payLine(f) + '<div class="gauge" style="margin:10px 0"><i style="width:' + (it.length ? d / it.length * 100 : 0) + '%"></i></div><div class="row" style="justify-content:space-between"><span class="small">' + d + ' / ' + it.length + ' étapes' + (nx ? ' · <b>Prochaine :</b> ' + esc(nx.libelle) : it.length ? ' · tout est fait' : '') + (fDeps(f.id).length ? ' · Dépenses : <b>' + eur(fTotal(f.id)) + '</b>' : '') + (+f.prix ? ' · Reste à partager : <b>' + eur(gainCalc(f).reste) + '</b>' : '') + (fSolde(f) ? ' · <span class="chip ok">Soldée</span>' : '') + '</span><button data-fopen="' + esc(f.id) + '">Ouvrir</button></div></div>';
 }
 function renderFormations() {
   $('fMissing').hidden = TRAVAIL_OK; $('fMain').hidden = !TRAVAIL_OK || !!fOpen; $('fCard').hidden = !fOpen; if (!TRAVAIL_OK || fOpen) return;
   const act = FO.filter(fActive).sort(fSort), fin = FO.filter(f => !fActive(f)).sort((a, b) => fSort(b, a));
-  $('fList').innerHTML = icsBarHtml() + bilanHtml() + (act.map(fBlock).join('') || '<div class="panel muted">Aucune formation en cours. Ajoutez la première avec le bouton ci-dessus.</div>') + (fin.length ? '<details class="panel"><summary><b>Terminées ou annulées</b> <span class="muted small">' + fin.length + '</span></summary><div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">' + fin.map(fBlock).join('') + '</div></details>' : '');
+  $('fList').innerHTML = icsBarHtml() + bilanHtml() + (act.map(fBlock).join('') || '<div class="panel muted">Aucune formation en cours. Ajoutez la première avec le bouton ci-dessus.</div>') + (fin.length ? '<details class="panel"><summary><b>Terminées ou annulées</b> <span class="muted small">' + fin.length + '</span></summary><div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">' + fin.map(fBlock).join('') + '</div></details>' : '') +
+    (typeof EMG !== 'undefined' ? '<p class="small muted" style="margin:4px 0 0"><a href="#emargement" onclick="sessionStorage.setItem(\'emg_liste\',\'1\')">Tous les émargements</a> (sessions fictives ou sans formation liée)</p>' : '');
 }
 async function fCreate(o) {
   if (!o || o.target) o = {};
@@ -1142,6 +1150,15 @@ async function fCreate(o) {
   if (await persist({ table: 'formations', op: 'upsert', row: { ...f } }, () => { FO = FO.filter(x => x.id !== f.id); FI = FI.filter(i => i.formation_id !== f.id); fOpen = null; renderFormations(); })) await persist({ table: 'formation_items', op: 'upsert', row: items.map(i => ({ ...i })) });
 }
 function fItemsHtml(f) { return fItems(f.id).map(i => '<li><button class="chk' + (i.fait ? ' on' : '') + '" data-fitem="' + esc(i.id) + '" aria-label="' + (i.fait ? 'Décocher' : 'Cocher') + '">' + (i.fait ? '✓' : '') + '</button><div><span' + (i.fait ? ' style="text-decoration:line-through;opacity:.6"' : '') + '>' + esc(i.libelle) + '</span>' + (i.fait && i.fait_par ? '<div class="muted small">fait par ' + esc(i.fait_par) + (i.fait_le ? ' le ' + fr(i.fait_le.slice(0, 10)) : '') + '</div>' : '') + '</div><button data-fdel="' + esc(i.id) + '" aria-label="Retirer cette étape">×</button></li>').join(''); }
+// sous-onglet « Émargement » de la fiche formation (emargement.js)
+function fEmg(f) {
+  const el = $('f_emg'); if (!el) return;
+  if (typeof EMG === 'undefined') { el.innerHTML = '<div class="panel muted">Émargement indisponible : rechargez la page.</div>'; return; }
+  if (!f.code_session) { el.innerHTML = '<div class="panel muted">Cette formation n’est pas encore reliée à un émargement. Claude prépare l’émargement depuis le classeur des formations à la demande d’Alexandre, puis inscrit le code de la session dans l’onglet Infos.</div>'; return; }
+  EMG.monter(el, f.code_session);
+}
+// à l'ouverture d'une fiche : un jour de formation, on arrive directement sur l'émargement
+const fTabDefaut = id => { const f = FO.find(x => x.id === id); return f && typeof EMG !== 'undefined' && EMG.aujourdhui(f.code_session) ? 'emarg' : 'infos'; };
 function fCardRender() {
   const f = FO.find(x => x.id === fOpen); if (!f) { fOpen = null; renderFormations(); return; }
   let arm = false;
@@ -1151,6 +1168,7 @@ function fCardRender() {
     '<div class="row"><label class="f">Dates (texte)<input id="f_dt" value="' + esc(f.dates_txt) + '" placeholder="ex. 26-27/11 + 14/12/2026"></label><label class="f">Premier jour<input type="date" id="f_d1" value="' + esc(dateOnly(f.date_debut)) + '"></label><label class="f">Dernier jour<input type="date" id="f_d2" value="' + esc(dateOnly(f.date_fin)) + '"></label></div>' +
     '<div class="row"><label class="f">Lieu<input id="f_lieu" value="' + esc(f.lieu) + '"></label><label class="f">Participants<input id="f_part" value="' + esc(f.participants) + '"></label></div>' +
     '<div class="row"><label class="f">Responsable<select id="f_resp"><option value="">—</option>' + pourOptions(f.responsable) + '</select></label><label class="f">Statut<select id="f_stat">' + FSTAT.map(x => '<option' + (x === f.statut ? ' selected' : '') + '>' + x + '</option>').join('') + '</select></label></div>' +
+    '<label class="f">Code de la session (classeur, pour l’émargement)<input id="f_code" value="' + esc(f.code_session || '') + '" placeholder="ex. 2026-11-ADSEA05" autocomplete="off" autocapitalize="characters"></label>' +
     '<label class="f">Notes<textarea id="f_notes" rows="3">' + esc(f.notes) + '</textarea></label>' + fSuiviHtml(f) +
     '<div class="row" style="justify-content:space-between"><button id="f_del">Supprimer la formation</button><button class="primary" id="f_save">Enregistrer</button></div></div>' +
     '<div data-ft="etapes" class="ftab"><div id="f_scan">' + scanHtml(f) + '</div><ul class="list" id="fItems"></ul>' +
@@ -1161,15 +1179,16 @@ function fCardRender() {
       '<div class="muted small" id="f_lgp">' + (f.logement_par ? 'Mis à jour par ' + esc(f.logement_par) : '') + '</div>' +
       '<div class="small" id="f_lgd">' + lgDepHtml(f) + '</div></div>' +
     '<div data-ft="depenses" class="ftab" id="f_dep"></div>' +
+    '<div data-ft="emarg" class="ftab" id="f_emg"></div>' +
     '</div>';
-  $('fItems').innerHTML = fItemsHtml(f); renderDepenses(f); fTabShow();
-  $('fCard').onclick = e => { const g = e.target.closest('[data-ft-go]'); if (g) { fTab = g.dataset.ftGo; fTabShow(); } };
-  $('f_close').onclick = () => { fOpen = null; renderFormations(); };
+  $('fItems').innerHTML = fItemsHtml(f); renderDepenses(f); fTabShow(); if (fTab === 'emarg') fEmg(f);
+  $('fCard').onclick = e => { const g = e.target.closest('[data-ft-go]'); if (g) { fTab = g.dataset.ftGo; fTabShow(); if (fTab === 'emarg') fEmg(f); else if (typeof EMG !== 'undefined') EMG.quitter(); } };
+  $('f_close').onclick = () => { if (typeof EMG !== 'undefined') EMG.quitter(); fOpen = null; renderFormations(); };
   const lgSave = async msg => { f.logement_infos = $('f_lgi').value.trim(); f.logement_par = me.prenom; f.maj = nowIso(); $('f_lgc').innerHTML = lgChip(f); $('f_lgp').textContent = 'Mis à jour par ' + me.prenom; if (await persist({ table: 'formations', op: 'upsert', row: { ...f } }) && msg) toast(msg); };
   $('f_lgs').onclick = e => { const b = e.target.closest('[data-lg]'); if (!b) return; f.logement_statut = b.dataset.lg; $('f_lgs').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); lgSave(f.logement_statut === 'Réservé' ? 'Logement noté comme réservé' : 'Logement : ' + f.logement_statut.toLowerCase()); };
   $('f_lgi').onchange = () => lgSave('Infos du logement enregistrées');
   fSuiviInit(f);
-  $('f_save').onclick = async () => { const d1 = $('f_d1').value, d2 = $('f_d2').value; Object.assign(f, { intitule: $('f_int').value.trim() || f.intitule, client: $('f_cli').value.trim(), dates_txt: $('f_dt').value.trim(), date_debut: d1 || null, date_fin: d2 || null, lieu: $('f_lieu').value.trim(), participants: $('f_part').value.trim(), responsable: $('f_resp').value, statut: $('f_stat').value, notes: $('f_notes').value.trim(), logement_infos: $('f_lgi').value.trim(), maj: nowIso() }); if (await persist({ table: 'formations', op: 'upsert', row: { ...f } })) toast('Enregistré'); };
+  $('f_save').onclick = async () => { const d1 = $('f_d1').value, d2 = $('f_d2').value; Object.assign(f, { intitule: $('f_int').value.trim() || f.intitule, client: $('f_cli').value.trim(), dates_txt: $('f_dt').value.trim(), date_debut: d1 || null, date_fin: d2 || null, lieu: $('f_lieu').value.trim(), code_session: $('f_code').value.trim().toUpperCase() || null, participants: $('f_part').value.trim(), responsable: $('f_resp').value, statut: $('f_stat').value, notes: $('f_notes').value.trim(), logement_infos: $('f_lgi').value.trim(), maj: nowIso() }); if (await persist({ table: 'formations', op: 'upsert', row: { ...f } })) toast('Enregistré'); };
   $('f_del').onclick = async () => { if (!arm) { arm = true; $('f_del').textContent = 'Confirmer la suppression'; return; } FO = FO.filter(x => x.id !== f.id); FI = FI.filter(i => i.formation_id !== f.id); fOpen = null; renderFormations(); await persist({ table: 'formations', op: 'delete', key: 'id', val: f.id }); };
   $('f_addi').onclick = async () => { const l = $('f_new').value.trim(); if (!l) return; const it = { id: uid(), formation_id: f.id, libelle: l, ordre: Math.max(0, ...fItems(f.id).map(i => i.ordre)) + 1, fait: false, fait_le: null, fait_par: '' }; FI.push(it); $('f_new').value = ''; $('fItems').innerHTML = fItemsHtml(f); await persist({ table: 'formation_items', op: 'upsert', row: { ...it } }); };
   $('fItems').onclick = async e => {
@@ -1212,7 +1231,7 @@ function renderMonJour() {
   $('mjList').innerHTML = items.slice(0, 8).join('') + (items.length > 8 ? '<li class="muted small">Et ' + (items.length - 8) + ' autres.</li>' : '') || '<li class="muted">Rien d’urgent aujourd’hui : c’est le bon moment pour appeler.</li>';
   const nf = TRAVAIL_OK ? FO.filter(f => fActive(f) && (!f.date_fin || f.date_fin >= today) && !(f.date_debut && f.date_debut < today && !f.date_fin)).sort(fSort)[0] : null;
   $('mjNotif').hidden = !(pushState === 'off' || pushState === 'ios'); $('mjFormP').hidden = !TRAVAIL_OK;
-  $('mjForm').innerHTML = nf ? '<div class="row" style="justify-content:space-between"><div><b>' + esc(nf.intitule) + '</b><div class="muted small">' + esc([nf.client, fDates(nf)].filter(Boolean).join(' · ')) + '</div>' + (lgChip(nf) ? '<div style="margin-top:6px">' + lgChip(nf) + '</div>' : '') + (fNext(nf) ? '<div class="small" style="margin-top:6px"><b>Prochaine étape :</b> ' + esc(fNext(nf).libelle) + '</div>' : '') + '</div><button data-fopen="' + esc(nf.id) + '">Ouvrir</button></div>' : '<span class="muted">Aucune formation à venir enregistrée.</span>';
+  $('mjForm').innerHTML = nf ? '<div class="row" style="justify-content:space-between"><div><b>' + esc(nf.intitule) + '</b><div class="muted small">' + esc([nf.client, fDates(nf)].filter(Boolean).join(' · ')) + '</div>' + (lgChip(nf) ? '<div style="margin-top:6px">' + lgChip(nf) + '</div>' : '') + (fNext(nf) ? '<div class="small" style="margin-top:6px"><b>Prochaine étape :</b> ' + esc(fNext(nf).libelle) + '</div>' : '') + '</div>' + (typeof EMG !== 'undefined' && EMG.aujourdhui(nf.code_session) ? '<button class="primary" data-fopen="' + esc(nf.id) + '">Émargement</button>' : '<button data-fopen="' + esc(nf.id) + '">Ouvrir</button>') + '</div>' : '<span class="muted">Aucune formation à venir enregistrée.</span>';
   $('mjNotesP').hidden = !TRAVAIL_OK;
   $('mjNotes').innerHTML = TRAVAIL_OK ? NO.slice().sort((a, b) => (b.cree_le || '').localeCompare(a.cree_le || '')).slice(0, 3).map(n => '<li><div><div class="small"><b>' + esc(n.auteur) + '</b> · ' + esc(fdt(n.cree_le)) + (n.decision ? ' <span class="chip ok">Décision</span>' : '') + '</div><div style="white-space:pre-wrap">' + esc(n.texte.slice(0, 160)) + '</div></div></li>').join('') || '<li class="muted">Aucun message.</li>' : '';
 }
@@ -1263,7 +1282,7 @@ function initTravail() {
     else if ((b = e.target.closest('[data-topen]'))) { tOpen = b.dataset.topen; renderTaches(); tCardRender(); }
     else if ((b = e.target.closest('[data-copen]'))) { cOpen = +b.dataset.copen; location.hash = 'clients'; renderClients(); cCardRender(); }
     else if ((b = e.target.closest('[data-treq]'))) { prefill = { client: b.dataset.treq, type: 'Devis' }; location.hash = 'taches'; }
-    else if ((b = e.target.closest('[data-fopen]'))) { fOpen = b.dataset.fopen; fTab = 'infos'; location.hash = 'formations'; renderFormations(); fCardRender(); }
+    else if ((b = e.target.closest('[data-fopen]'))) { fOpen = b.dataset.fopen; fTab = fTabDefaut(fOpen); location.hash = 'formations'; renderFormations(); fCardRender(); }
   });
   $('tAdd').addEventListener('submit', e => { e.preventDefault(); addTask(); });
   $('tType').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; tType = b.dataset.t; fillTForm(); });
