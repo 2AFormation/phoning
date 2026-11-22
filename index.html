@@ -198,10 +198,10 @@ button,.btn{border-radius:var(--r-m)}
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) nav.tabs{background:#123b34}:root:not([data-theme="light"]) body::before{background:#123b34}}
 /* ---------- dépenses v10 */
-.ftabs{margin:2px 0 4px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.ftabs{margin:2px 0 4px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
 .ftabs button{padding:8px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-radius:999px}
 .ftabs .num{opacity:.75;font-size:12.5px}
-@media (max-width:480px){.ftabs .num{display:none}.ftabs button{font-size:14px}}
+@media (max-width:480px){.ftabs{grid-template-columns:repeat(3,minmax(0,1fr))}.ftabs .num{display:none}.ftabs button{font-size:14px}}
 .ftab{display:flex;flex-direction:column;gap:12px}
 .ftab>label.f{flex:none}
 .ftab .row>label.f{flex:1 1 140px}
@@ -317,7 +317,6 @@ dialog.fnew::backdrop{background:rgba(0,0,0,.45)}
   <a href="#taches" data-v="taches"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 4.5h15v15h-15zM8.5 12.2l2.5 2.5 4.6-5.2"/></svg><span class="lbl">Tâches</span><span class="nb" id="tBadge" hidden></span></a>
   <a href="#clients" data-v="clients"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V6.5L12 3l8 3.5V20M4 20h16M9 20v-5h6v5M8.5 9.5h.01M12 9.5h.01M15.5 9.5h.01"/></svg><span class="lbl">Clients</span></a>
   <a href="#formations" data-v="formations"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 9 12 4.5 21.5 9 12 13.5zM6.5 11v5c3.3 2.7 7.7 2.7 11 0v-5M21.5 9v5"/></svg><span class="lbl">Formations</span></a>
-  <a href="#emargement" data-v="emargement" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5c2.5-3 4-8 6.5-8 2 0 .5 5 2.5 5 1.6 0 2.4-2.5 3.6-2.5 1 0 1.2 1.5 2.4 1.5M4 22h16M15.5 3.5l3 3-7 7H8.5v-3z"/></svg><span class="lbl">Émarger</span></a>
   <a href="#notes" data-v="notes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 5.5h15v10h-9l-4.5 4v-4h-1.5z"/></svg><span class="lbl">Notes</span></a>
   </div>
   <button id="logout" class="small out">Se déconnecter</button>
@@ -531,7 +530,7 @@ dialog.fnew::backdrop{background:rgba(0,0,0,.45)}
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js?v=2"></script>
-<script src="app.js?v=17"></script>
-<script src="emargement.js?v=17"></script>
+<script src="app.js?v=18"></script>
+<script src="emargement.js?v=18"></script>
 </body>
 </html>
