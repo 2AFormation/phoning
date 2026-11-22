@@ -1,4 +1,6 @@
-// 2A Travail – onglet « Émargement » (formateurs). Fichier séparé : n'utilise de app.js
+// 2A Travail – émargement (formateurs). Depuis la v18, il s'affiche dans la fiche de chaque formation
+// (onglet Formations → sous-onglet « Émargement », EMG.monter) ; la page #emargement reste la liste complète
+// (sessions fictives ou sans formation liée, lien des notifications). Fichier séparé : n'utilise de app.js
 // que sb (connexion Supabase), toast, esc et $, transmis par EMG.init(). Ne lit ni n'écrit aucune table directement :
 // tout passe par les fonctions contrôlées public.emg_* (schéma « emargement » verrouillé).
 'use strict';
@@ -9,9 +11,11 @@ const EMG = (() => {
   const OBS = { arrivee: 'Arrivée à', depart: 'Départ à', absence_signalee: 'Absence signalée' };
   let sb, toast, esc, $;
   let data = null, ouverte = null, det = null, minuterie = null, vue = 'liste', enCours = false, qrPret = null;
+  let zone = null, filtre = null, apresChargement = null; // zone = fiche formation (EMG.monter), filtre = code de session
 
   // ---------- outils
-  const z = () => $('v-emargement');
+  const z = () => zone || $('v-emargement');
+  const aujIso = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Paris' });
   const hfr = t => String(t || '').replace(/^0/, '').replace(':', 'h');
   const jourCourt = j => { const d = new Date(j + 'T12:00:00'); return d.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit' }); };
   const jourLong = j => { const s = new Date(j + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); return s.charAt(0).toUpperCase() + s.slice(1); };
@@ -61,14 +65,16 @@ const EMG = (() => {
   async function afficher() {
     if (ouverte) return ouvrirDj(ouverte, true);
     vue = 'liste'; arreter();
-    z().innerHTML = '<h1>Émargement</h1><p class="muted">Chargement…</p>';
-    try { data = await rpc('emg_mes_demi_journees'); } catch (e) { z().innerHTML = '<h1>Émargement</h1><div class="panel">Données indisponibles : ' + esc(msgErr(e)) + '</div>'; return; }
+    const h1 = filtre ? '' : '<h1>Émargement</h1>';
+    z().innerHTML = h1 + '<p class="muted">Chargement…</p>';
+    try { data = await rpc('emg_mes_demi_journees'); } catch (e) { z().innerHTML = h1 + '<div class="panel">Données indisponibles : ' + esc(msgErr(e)) + '</div>'; return; }
     majOnglet();
-    if (!data.moi) { z().innerHTML = '<h1>Émargement</h1><div class="panel muted">L\'émargement est réservé aux formateurs de 2A Formation.</div>'; return; }
-    const auj = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Paris' });
-    const ss = (data.sessions || []).filter(s => (s.demi_journees || []).some(d => d.jour >= auj || d.etat === 'ouverte'));
-    const passees = (data.sessions || []).filter(s => !ss.includes(s));
-    const bloc = s => '<div class="panel"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h2>' + esc(s.intitule) + '</h2>' +
+    if (!data.moi) { z().innerHTML = h1 + '<div class="panel muted">L\'émargement est réservé aux formateurs de 2A Formation.</div>'; return; }
+    const auj = aujIso();
+    const toutes = (data.sessions || []).filter(s => !filtre || s.code === filtre);
+    const ss = filtre ? toutes : toutes.filter(s => (s.demi_journees || []).some(d => d.jour >= auj || d.etat === 'ouverte'));
+    const passees = toutes.filter(s => !ss.includes(s));
+    const bloc = s => '<div class="panel"><div class="row" style="justify-content:space-between;align-items:flex-start"><div>' + (filtre ? '<h3>Demi-journées à émarger</h3>' : '<h2>' + esc(s.intitule) + '</h2>') +
       '<div class="muted small">' + esc(s.code) + ' · ' + esc(s.lieu) + '</div></div>' +
       (s.fictive ? '<span class="chip">Session fictive</span>' : '') + (!s.publiee ? '<span class="chip soon">À valider</span>' : '') + '</div>' +
       (!s.publiee && data.moi.role === 'admin' ? '<div class="note" style="margin-top:10px">Session importée, pas encore visible d\'Antoine. Vérifiez la liste puis validez. <button class="primary" data-pub="' + s.id + '" style="margin-top:8px">Valider pour les formateurs</button></div>' : '') +
@@ -77,9 +83,14 @@ const EMG = (() => {
         chip(d.etat) + ' <span class="muted small">' + d.signes + ' signé' + (d.signes > 1 ? 's' : '') + ' sur ' + d.attendus + (d.pdf ? ' · PDF prêt' : '') + (d.mienne ? '' : ' · pas votre demi-journée') + '</span></div>' +
         '<button class="' + (d.jour === auj && d.mienne && d.etat !== 'cloturee' && d.etat !== 'papier' ? 'primary' : '') + '" data-dj="' + d.id + '">' + (d.etat === 'ouverte' ? 'Reprendre' : d.jour === auj && d.etat === 'preparee' && d.mienne ? 'Ouvrir' : 'Voir') + '</button></div>').join('') + '</div>' +
       (data.moi.role === 'admin' ? '<div class="row" style="margin-top:10px"><button class="small" data-verif="' + s.id + '">Vérifier l\'intégrité</button></div>' : '') + '</div>';
-    z().innerHTML = '<div class="row" style="justify-content:space-between;align-items:flex-end"><h1>Émargement</h1><button id="emgMaj" class="small">Actualiser</button></div>' +
-      '<p class="muted">Vos demi-journées de formation : ouvrir, faire signer, clôturer.</p>' +
-      '<div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">' + (ss.map(bloc).join('') || '<div class="panel muted">Aucune demi-journée à venir. Les sessions sont préparées par Claude à la demande d\'Alexandre, depuis le classeur des formations.</div>') + '</div>' +
+    const vide = filtre
+      ? '<div class="panel muted">L\'émargement de cette formation (' + esc(filtre) + ') n\'est pas encore disponible : Claude le prépare depuis le classeur des formations, à la demande d\'Alexandre, puis Alexandre le valide.</div>'
+      : '<div class="panel muted">Aucune demi-journée à venir. Les sessions sont préparées par Claude à la demande d\'Alexandre, depuis le classeur des formations.</div>';
+    z().innerHTML = (filtre
+      ? '<div class="row" style="justify-content:space-between;align-items:center"><p class="muted" style="margin:0">À chaque demi-journée : ouvrir, montrer le QR code, clôturer. La feuille papier reste dans le dossier.</p><button id="emgMaj" class="small">Actualiser</button></div>'
+      : '<div class="row" style="justify-content:space-between;align-items:flex-end"><h1>Émargement</h1><button id="emgMaj" class="small">Actualiser</button></div>' +
+        '<p class="muted">Toutes les sessions d\'émargement. Pour une formation, passez plutôt par l\'onglet Formations → la formation → Émargement.</p>') +
+      '<div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">' + (ss.map(bloc).join('') || vide) + '</div>' +
       (passees.length ? '<details class="panel" style="margin-top:12px"><summary><b>Sessions passées</b> <span class="muted small">' + passees.length + '</span></summary><div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">' + passees.map(bloc).join('') + '</div></details>' : '');
     $('emgMaj').onclick = afficher;
     z().querySelectorAll('[data-dj]').forEach(b => b.onclick = () => ouvrirDj(b.dataset.dj));
@@ -101,6 +112,8 @@ const EMG = (() => {
   }
   async function rafraichir() {
     if (vue !== 'dj' || !ouverte || document.hidden) return;
+    if (zone && !zone.isConnected) return arreter(); // fiche formation fermée
+    if (zone && zone.offsetParent === null) return; // sous-onglet masqué
     try { det = await rpc('emg_detail', { p_dj: ouverte, p_images: false }); rendreDj(true); } catch (e) {}
   }
   function retour() { ouverte = null; det = null; arreter(); fermerPlein(); afficher(); }
@@ -132,7 +145,7 @@ const EMG = (() => {
         '<p class="muted small" style="margin-top:8px">Une erreur après clôture se corrige par une annotation : elle s\'ajoute au dossier et produit un additif PDF, la feuille d\'origine ne change pas.</p>' +
         '<label class="f" style="margin-top:8px">Nouvelle annotation<textarea id="eAnnTxt" rows="2" maxlength="1000" placeholder="Ex. : erreur sur le prénom, absence justifiée après coup…"></textarea></label><div class="row" style="margin-top:8px"><button id="eAnn">Ajouter l\'annotation</button></div></div>';
     }
-    z().innerHTML = '<div class="row"><button id="eRet" class="small">← Mes demi-journées</button></div>' +
+    z().innerHTML = '<div class="row"><button id="eRet" class="small">' + (filtre ? '← Toutes les demi-journées' : '← Mes demi-journées') + '</button></div>' +
       '<div><div class="eyebrow">' + esc(s.code) + (s.fictive ? ' · session fictive' : '') + '</div><h1 style="margin-top:4px">' + esc(jourLong(d.jour)) + ' · ' + PERIODE[d.periode] + '</h1>' +
       '<p class="muted">' + hfr(d.debut) + ' – ' + hfr(d.fin) + ' · ' + esc(s.intitule) + ' · ' + esc(s.lieu) + '</p><div style="margin-top:6px">' + chip(d.etat) + '</div></div>' + corps;
     $('eRet').onclick = retour;
@@ -150,7 +163,7 @@ const EMG = (() => {
       action(b, async () => { await rpc('emg_annoter', { p_dj: d.id, p_texte: t }); demanderPdf(d.id); toast('Annotation ajoutée'); await ouvrirDj(d.id, true); }); });
     z().querySelectorAll('[data-sec]').forEach(b => b.onclick = () => ecranSecours(st.find(x => x.id === b.dataset.sec)));
     z().querySelectorAll('[data-pdf]').forEach(b => b.onclick = () => action(b, () => ouvrirPdf(b.dataset.pdf)));
-    if (!maj) window.scrollTo(0, 0);
+    if (!maj) { if (zone) zone.scrollIntoView({ block: 'start' }); else window.scrollTo(0, 0); }
   }
 
   // ---------- QR plein écran (pour la salle)
@@ -297,11 +310,20 @@ const EMG = (() => {
 
   // ---------- onglet visible seulement pour les formateurs
   async function majOnglet() {
-    const a = document.querySelector('nav a[data-v="emargement"]'); if (!a) return;
-    if (!data) { try { data = await rpc('emg_mes_demi_journees'); } catch (e) { return; } }
-    a.hidden = !data.moi;
+    if (!data) { try { data = await rpc('emg_mes_demi_journees'); } catch (e) { return; } if (apresChargement) apresChargement(); }
+    const a = document.querySelector('nav a[data-v="emargement"]'); if (a) a.hidden = !data.moi;
   }
+  async function charger() { try { data = await rpc('emg_mes_demi_journees'); } catch (e) {} return data; }
+  // une demi-journée de cette session a lieu aujourd'hui (données déjà chargées)
+  const aujourdhui = code => !!(data && code && (data.sessions || []).some(s => s.code === code && (s.demi_journees || []).some(d => d.jour === aujIso())));
+  // affiche l'émargement d'une formation dans sa fiche (sous-onglet « Émargement »)
+  function monter(el, code) {
+    if (!sb || !el) return;
+    if (filtre !== code) { ouverte = null; det = null; }
+    zone = el; filtre = code || null; afficher();
+  }
+  function pleinePage() { if (zone || filtre) { ouverte = null; det = null; } zone = null; filtre = null; afficher(); }
 
-  function init(o) { sb = o.sb; toast = o.toast; esc = o.esc; $ = o.$; majOnglet(); }
-  return { init, afficher: () => sb && afficher(), quitter: () => { arreter(); fermerPlein(); }, majOnglet };
+  function init(o) { sb = o.sb; toast = o.toast; esc = o.esc; $ = o.$; apresChargement = o.apresChargement || null; majOnglet(); }
+  return { init, afficher: () => sb && pleinePage(), monter, charger, aujourdhui, quitter: () => { arreter(); fermerPlein(); }, majOnglet };
 })();
