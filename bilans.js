@@ -1,5 +1,6 @@
 // 2A Travail – bilans de formation (positionnement, appréciation des acquis, évaluation à chaud,
-// auto-évaluation des formateurs, PDF de résultats). Sous-onglet « Bilans » de la fiche formation.
+// auto-évaluation des formateurs, PDF de résultats, évaluations à froid). Sous-onglet « Bilans » de la fiche formation.
+// v22 : étape « À froid » (lot B) ; confirmations dans la page (window.confirm et alert sont bloqués dans le navigateur intégré).
 // Fichier séparé : n'utilise de app.js que sb, toast, esc et $, transmis par BIL.init(). Ne lit ni n'écrit
 // aucune table : tout passe par les fonctions contrôlées public.bil_* (schéma « bilans » verrouillé).
 // Les questionnaires s'affichent avec questionnaire.js (QUEST), le même que la page des stagiaires.
@@ -8,7 +9,7 @@ const BIL = (() => {
   const QR_LIB = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
   const ETAT = { preparee: ['À ouvrir', ''], ouverte: ['Ouvert', 'soon'], fermee: ['Fermé', 'ok'] };
   const NIV = [['acquis', 'Acquis'], ['en_cours', 'En cours'], ['a_renforcer', 'À renforcer']];
-  const NOM_TYPE = { positionnement: 'Positionnement', chaud: 'Évaluation à chaud' };
+  const NOM_TYPE = { positionnement: 'Positionnement', chaud: 'Évaluation à chaud', froid_stagiaire: 'À froid · stagiaires', froid_responsable: 'À froid · établissement' };
   let sb, toast, esc, $;
   let zone = null, code = null, d = null, enCours = false, plein = null, minuterie = null, qrPret = null;
 
@@ -16,6 +17,24 @@ const BIL = (() => {
   const msgErr = e => (e && (e.message || e.details)) || 'Action impossible pour le moment.';
   async function rpc(nom, args) { const { data, error } = await sb.rpc(nom, args || {}); if (error) throw error; return data; }
   async function action(btn, fn) { if (enCours) return; enCours = true; if (btn) btn.disabled = true; try { await fn(); } catch (e) { toast(msgErr(e)); } finally { enCours = false; if (btn) btn.disabled = false; } }
+  // Fonction serveur : le message d'erreur renvoyé par la fonction est affiché tel quel
+  async function fn(nom, body) {
+    const { data, error } = await sb.functions.invoke(nom, { body });
+    if (error) { let m = error.message; try { const j = await error.context.json(); if (j && j.erreur) m = j.erreur; } catch (x) { /* message générique */ } throw new Error(m); }
+    if (data && data.erreur) throw new Error(data.erreur);
+    return data;
+  }
+  // Confirmation et message dans la page (html déjà échappé par l'appelant)
+  function confirmer(html, oui, non) {
+    return new Promise(ok => {
+      const c = document.createElement('div'); c.className = 'bil-conf';
+      c.innerHTML = '<div class="in"><div>' + html + '</div><div class="row" style="margin-top:12px;justify-content:flex-end">' +
+        (non === null ? '' : '<button data-r="0">' + esc(non || 'Annuler') + '</button>') + '<button class="primary" data-r="1">' + esc(oui || 'Confirmer') + '</button></div></div>';
+      document.body.appendChild(c);
+      c.querySelectorAll('[data-r]').forEach(b => b.onclick = () => { c.remove(); ok(b.dataset.r === '1'); });
+    });
+  }
+  const informer = html => confirmer(html, 'OK', null);
   const frDate = iso => iso ? iso.slice(0, 10).split('-').reverse().join('/') : '';
   const plusJours = (iso, n) => { const x = new Date(iso + 'T12:00:00'); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
   const camp = t => (d.campagnes || []).find(c => c.type === t);
@@ -59,11 +78,25 @@ const BIL = (() => {
   .bil-res .l{flex:0 0 46%}
   .bil-res .v{flex:0 0 42px;text-align:right;font-family:var(--f-data)}
   .bil-txt{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:14px;white-space:pre-wrap}
+  .bil-conf{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px}
+  .bil-conf .in{background:var(--bg);border-radius:14px;padding:16px;max-width:460px;width:100%;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+  .bil-ctl{display:flex;gap:10px;align-items:flex-start;padding:5px 0;font-size:14px}
+  .bil-ctl>span{flex:0 0 16px;font-weight:800;text-align:center}
+  .bil-ctl .r{color:var(--bad)}.bil-ctl .o{color:var(--warn)}.bil-ctl .v{color:var(--ok)}
   `;
   document.head.appendChild(css);
 
   // ---------- chargement et étapes
-  async function charger() { d = await rpc('bil_session', { p_code: code }); return d; }
+  // L'état de l'à froid (bil_froid_etat) est relu avec la session, sauf pendant l'affichage du QR (relecture toutes les 4 s)
+  async function charger(froid = true) {
+    const ancien = d && d.froid;
+    d = await rpc('bil_session', { p_code: code });
+    if (d && d.session) {
+      if (froid) { try { d.froid = await rpc('bil_froid_etat', { p_session: d.session.id }); } catch (e) { d.froid = null; } }
+      else d.froid = ancien;
+    }
+    return d;
+  }
   async function afficher(silencieux) {
     if (!zone) return;
     if (!silencieux) zone.innerHTML = '<p class="muted">Chargement…</p>';
@@ -117,9 +150,24 @@ const BIL = (() => {
       aide: C && C.etat === 'fermee' ? 'Le PDF part par mail à 2aa.formation et aux formateurs ; Claude le range dans 7_Evaluations.' : 'Disponible une fois l’évaluation à chaud fermée.',
       boutons: (C && C.etat === 'fermee' ? '<button class="' + (docs.length ? '' : 'primary') + '" data-pdf="1">' + (docs.length ? 'Produire une nouvelle version' : 'Produire le PDF') + '</button>' : '') +
         docs.map(o => '<button data-lire="' + o.id + '">Ouvrir la version ' + o.version + '</button>').join('') });
-    // 7. à froid
-    E.push({ k: 'froid', titre: 'Évaluations à froid (stagiaires et responsable)', fait: false, quand: 'Vers le ' + frDate(plusJours(s.dernier_jour, 90)) + ' (3 mois après)',
-      txt: 'Envoi par Alexandre quand l’appli le proposera (prochaine version), aux adresses laissées et au responsable.', aide: '', boutons: '' });
+    // 7. à froid (lot B) : préparation, adresses, envoi par Alexandre, remise, clôture, bilan à froid
+    const F = d.froid, FS = camp('froid_stagiaire'), FR = camp('froid_responsable'), fdocs = (F && F.documents) || [], admin = moi.role === 'admin';
+    const fEnv = F && F.envoi && F.envoi.envoye_le, fFerme = FS && FR && FS.etat === 'fermee' && FR.etat === 'fermee';
+    E.push({ k: 'froid', titre: 'Évaluations à froid (stagiaires et établissement)', fait: fdocs.length > 0,
+      quand: 'À partir du ' + frDate(F ? F.j90 : plusJours(s.dernier_jour, 90)) + ' (3 mois après)' + (F && F.date_limite ? ', réponses jusqu’au ' + frDate(F.date_limite) : ''),
+      txt: !F ? 'État indisponible pour le moment.' : [
+        F.preparee ? null : 'Pas encore préparées',
+        F.adresses + ' adresse' + (F.adresses > 1 ? 's' : '') + ' en attente d’envoi',
+        fEnv ? 'envoyé le ' + esc(F.envoi.envoye_le) : F.preparee ? 'pas encore envoyé' : null,
+        FS ? 'stagiaires : ' + FS.nb + ' réponse' + (FS.nb > 1 ? 's' : '') + ' ' + chip(FS.etat) : null,
+        FR ? 'établissement : ' + FR.nb + ' ' + chip(FR.etat) : null,
+        fdocs.length ? 'bilan à froid : version ' + fdocs[fdocs.length - 1].version : null].filter(Boolean).join(' · '),
+      aide: !F ? '' : !admin ? 'Préparation, envoi et clôture sont faits par Alexandre.'
+        : !F.preparee ? 'Préparez les questionnaires, saisissez la feuille papier des adresses, puis notez sa destruction.'
+        : !fEnv ? (F.aujourdhui < F.j90 ? 'Envoi possible à partir du ' + frDate(F.j90) + '.' : 'Vérifiez l’aperçu, envoyez-vous un test, puis envoyez.')
+        : !fFerme ? 'Vérifiez la remise dans les 24 h ; fermez les questionnaires à la date limite.'
+        : fdocs.length ? '' : 'Produisez le bilan à froid : Claude vérifie son empreinte et le range dans 7_Evaluations.',
+      boutons: F ? '<button class="' + (admin && (!F.preparee || !fdocs.length && (fFerme || F.aujourdhui >= F.j90)) ? 'primary' : '') + '" data-froid="1">' + (admin ? 'Ouvrir l’à froid' : 'Voir l’à froid') + '</button>' : '' });
     return E;
   }
   const nomF = cle => ((d.formateurs || []).find(f => f.cle === cle) || { nom: cle }).nom;
@@ -142,17 +190,17 @@ const BIL = (() => {
     const on = (id, f) => { const b = $(id); if (b) b.onclick = () => f(b); };
     on('bMaj', () => afficher());
     on('bPub', b => action(b, async () => { await rpc('bil_publier', { p_session: s.id, p_publiee: true }); toast('Bilans visibles des formateurs'); afficher(true); }));
-    on('bVerif', b => action(b, async () => { const r = await rpc('bil_verifier', { p_session: s.id }); alert(r.ok ? 'Intégrité vérifiée : ' + r.lignes + ' enregistrements, chaîne d’empreintes intacte.' : 'ALERTE : ' + r.problemes.map(p => (p.table ? p.table + ' n°' + p.n + ' : ' : '') + p.probleme).join(' ; ')); }));
+    on('bVerif', b => action(b, async () => { const r = await rpc('bil_verifier', { p_session: s.id }); informer(esc(r.ok ? 'Intégrité vérifiée : ' + r.lignes + ' enregistrements, chaîne d’empreintes intacte.' : 'ALERTE : ' + r.problemes.map(p => (p.table ? p.table + ' n°' + p.n + ' : ' : '') + p.probleme).join(' ; '))); }));
     const q = sel => zone.querySelectorAll(sel);
-    q('[data-ouvrir]').forEach(b => b.onclick = () => {
+    q('[data-ouvrir]').forEach(b => b.onclick = async () => {
       const c = d.campagnes.find(x => x.id === b.dataset.ouvrir);
-      if (!confirm('Ouvrir « ' + NOM_TYPE[c.type] + ' » ? Les stagiaires pourront répondre avec le QR code jusqu’à la fermeture.')) return;
+      if (!await confirmer(esc('Ouvrir « ' + NOM_TYPE[c.type] + ' » ? Les stagiaires pourront répondre avec le QR code jusqu’à la fermeture.'), 'Ouvrir')) return;
       action(b, async () => { const a = await rpc('bil_ouvrir', { p_campagne: c.id }); memo('qr_' + c.id, a); await afficher(true); pleinQR(c.id); });
     });
     q('[data-qr]').forEach(b => b.onclick = () => pleinQR(b.dataset.qr));
-    q('[data-fermer]').forEach(b => b.onclick = () => {
+    q('[data-fermer]').forEach(b => b.onclick = async () => {
       const c = d.campagnes.find(x => x.id === b.dataset.fermer);
-      if (!confirm('Fermer « ' + NOM_TYPE[c.type] + ' » ? Plus aucune réponse par téléphone (la saisie du papier reste possible).')) return;
+      if (!await confirmer(esc('Fermer « ' + NOM_TYPE[c.type] + ' » ? Plus aucune réponse par téléphone (la saisie du papier reste possible).'), 'Fermer')) return;
       action(b, async () => { const r = await rpc('bil_fermer', { p_campagne: c.id }); try { sessionStorage.removeItem('bil_qr_' + c.id); } catch (e) {} toast('Fermé : ' + r.reponses + ' réponse(s)'); afficher(true); });
     });
     q('[data-papier]').forEach(b => b.onclick = () => ecranPapier(b.dataset.papier));
@@ -160,6 +208,7 @@ const BIL = (() => {
     q('[data-grille]').forEach(b => b.onclick = () => ecranGrille());
     q('[data-auto]').forEach(b => b.onclick = () => ecranAuto());
     q('[data-voirauto]').forEach(b => b.onclick = () => ecranLireAuto());
+    q('[data-froid]').forEach(b => b.onclick = () => ecranFroid());
     q('[data-pdf]').forEach(b => b.onclick = () => action(b, async () => {
       toast('Production du PDF…');
       const { data: r, error } = await sb.functions.invoke('bilans-pdf', { body: { action: 'produire', session_id: s.id } });
@@ -189,7 +238,7 @@ const BIL = (() => {
       '<div class="bil-cpt num" id="bCpt"></div><div class="row" style="justify-content:center"><button class="primary bil-big" id="bRet">Retour aux bilans</button><button id="bNouv">Nouveau code</button></div>' +
       '<p class="muted small">Environ 5 minutes. Chacun répond sur son propre téléphone ; sinon, version papier.</p></div>');
     const cpt = () => { const e = plein && plein.querySelector('#bCpt'); if (e && c()) e.textContent = c().nb + ' réponse' + (c().nb > 1 ? 's' : '') + ' sur ' + N; };
-    cpt(); minuterie = setInterval(async () => { if (!plein || document.hidden) return; try { await charger(); cpt(); } catch (e) {} }, 4000);
+    cpt(); minuterie = setInterval(async () => { if (!plein || document.hidden) return; try { await charger(false); cpt(); } catch (e) {} }, 4000);
     p.querySelector('#bRet').onclick = () => { fermerPlein(); rendre(); };
     p.querySelector('#bNouv').onclick = e => action(e.target, async () => { const n = await rpc('bil_nouveau_code', { p_campagne: cid }); memo('qr_' + cid, n); pleinQR(cid); });
     try {
@@ -199,7 +248,7 @@ const BIL = (() => {
   }
 
   // ---------- saisie d'un questionnaire papier
-  function ecranPapier(cid) {
+  function ecranPapier(cid, retour) {
     const c = d.campagnes.find(x => x.id === cid), m = d.modeles[c.modele_id], pos = c.type === 'positionnement';
     const deja = new Set(reps(c).map(r => r.stagiaire_id));
     const libres = (d.stagiaires || []).filter(x => !deja.has(x.id));
@@ -210,12 +259,13 @@ const BIL = (() => {
       '<div id="pQ"></div><div class="note">Une fois enregistrée, la saisie ne se modifie plus.</div>' +
       '<button class="primary bil-big" id="pOk">Enregistrer la saisie</button><button id="pAnn">Annuler</button>');
     const f = QUEST.rendre(p.querySelector('#pQ'), m.contenu, d.session.objectifs, {});
-    p.querySelector('#pAnn').onclick = () => fermerPlein();
-    p.querySelector('#pOk').onclick = e => {
+    p.querySelector('#pAnn').onclick = () => { if (retour) retour(); else fermerPlein(); };
+    p.querySelector('#pOk').onclick = async e => {
       const st = pos ? p.querySelector('#pSt').value : null;
       if (pos && !st) { toast('Choisissez le stagiaire.'); return; }
-      const r = f.lire(); if (!Object.keys(r).length && !confirm('Aucune réponse saisie : enregistrer une feuille vide ?')) return;
-      action(e.target, async () => { await rpc('bil_saisir_papier', { p_campagne: cid, p_stagiaire: st, p_contenu: r }); toast('Saisie enregistrée'); fermerPlein(); afficher(true); });
+      const r = f.lire(); if (!Object.keys(r).length && !await confirmer(esc('Aucune réponse saisie : enregistrer une feuille vide ?'), 'Enregistrer')) return;
+      action(e.target, async () => { await rpc('bil_saisir_papier', { p_campagne: cid, p_stagiaire: st, p_contenu: r }); toast('Saisie enregistrée');
+        if (retour) { await charger(); retour(); } else { fermerPlein(); afficher(true); } });
     };
   }
 
@@ -251,8 +301,8 @@ const BIL = (() => {
       try { await rpc('bil_acquis_commentaire', { p_session: s.id, p_stagiaire: t.dataset.com, p_texte: t.value }); toast('Commentaire enregistré'); } catch (e) { toast(msgErr(e)); }
     });
     const bv = p.querySelector('#gVal');
-    if (bv) bv.onclick = () => {
-      if (!confirm('Valider la grille ? Elle ne sera plus modifiable.' + (vide() ? '\n\nAttention : ' + vide() + ' case(s) vide(s).' : ''))) return;
+    if (bv) bv.onclick = async () => {
+      if (!await confirmer('Valider la grille ? Elle ne sera plus modifiable.' + (vide() ? '<br><br><b>Attention :</b> ' + vide() + ' case(s) vide(s).' : ''), 'Valider')) return;
       action(bv, async () => { await rpc('bil_valider_grille', { p_session: s.id }); toast('Grille validée'); fermerPlein(); afficher(true); });
     };
   }
@@ -265,7 +315,7 @@ const BIL = (() => {
       '<div id="aQ"></div><div class="note">Une fois envoyée, l’auto-évaluation ne se modifie plus.</div><button class="primary bil-big" id="aOk">Envoyer</button><button id="aAnn">Annuler</button>');
     const f = QUEST.rendre(p.querySelector('#aQ'), m.contenu, d.session.objectifs, {});
     p.querySelector('#aAnn').onclick = () => fermerPlein();
-    p.querySelector('#aOk').onclick = e => { if (!confirm('Envoyer votre auto-évaluation ?')) return;
+    p.querySelector('#aOk').onclick = async e => { if (!await confirmer('Envoyer votre auto-évaluation ?', 'Envoyer')) return;
       action(e.target, async () => { await rpc('bil_autoevaluer', { p_session: d.session.id, p_contenu: f.lire() }); toast('Auto-évaluation enregistrée'); fermerPlein(); afficher(true); }); };
   }
   function ecranLireAuto() {
@@ -301,25 +351,147 @@ const BIL = (() => {
     });
     return h;
   }
-  function ecranResultats(cid) {
+  function ecranResultats(cid, retour) {
     const c = d.campagnes.find(x => x.id === cid), m = d.modeles[c.modele_id], liste = reps(c), pos = c.type === 'positionnement';
     const noms = {}; (d.stagiaires || []).forEach(x => { noms[x.id] = x.nom; });
     const nomR = r => noms[r.stagiaire_id] || '?';
     let comp = '';
-    if (!pos) { // progression positionnement → fin de formation
-      const P = camp('positionnement'), lp = reps(P);
-      comp = '<div class="panel"><h3>Progression sur les objectifs</h3>' + d.session.objectifs.map((o, i) => {
-        const a = moy(lp.map(r => (r.contenu.obj || [])[i]).filter(x => x)), b = moy(liste.map(r => (r.contenu.obj || [])[i]).filter(x => x));
-        return '<div class="bil-res"><span class="l">' + esc(o) + '</span><span class="v">' + nf(a) + '</span><span>→</span><span class="v"><b>' + nf(b) + '</b></span></div>';
-      }).join('') + '<p class="muted small">Moyenne sur 4 au positionnement → en fin de formation.</p></div>';
+    if (c.type === 'chaud' || c.type === 'froid_stagiaire') { // progression positionnement → fin de formation (→ à froid)
+      const froid = c.type === 'froid_stagiaire', lp = reps(camp('positionnement')), lc = froid ? reps(camp('chaud')) : liste;
+      const m = (l, i) => moy(l.map(r => (r.contenu.obj || [])[i]).filter(x => x));
+      comp = '<div class="panel"><h3>Progression sur les objectifs</h3>' + d.session.objectifs.map((o, i) =>
+        '<div class="bil-res"><span class="l">' + esc(o) + '</span><span class="v">' + nf(m(lp, i)) + '</span><span>→</span><span class="v">' + (froid ? nf(m(lc, i)) + '</span><span>→</span><span class="v"><b>' + nf(m(liste, i)) + '</b>' : '<b>' + nf(m(lc, i)) + '</b>') + '</span></div>'
+      ).join('') + '<p class="muted small">' + (froid ? 'Moyenne sur 4 au positionnement → en fin de formation → à froid. Réponses anonymes : comparaison du groupe, pas des personnes.' : 'Moyenne sur 4 au positionnement → en fin de formation.') + '</p></div>';
     }
     const p = ouvrirPlein('<div class="eyebrow">' + esc(d.session.intitule) + '</div><h2>' + esc(NOM_TYPE[c.type]) + ' · ' + liste.length + ' réponse(s)</h2>' +
       (pos ? '<p class="muted small">Réponses nominatives, pour adapter la formation. Les demandes d’aménagement ne contiennent aucun détail.</p>' : '<p class="muted small">Réponses sans nom (sauf nom laissé volontairement).</p>') +
       comp + '<div class="panel">' + resume(m.contenu, liste.map(r => Object.assign({ __s: r.stagiaire_id }, r.contenu)), false, d.session.objectifs, pos ? r => noms[r.__s] || '?' : null) + '</div>' +
       (pos ? '<details class="panel"><summary><b>Qui a répondu</b></summary><ul class="list">' + d.stagiaires.map(x => '<li><div>' + esc(x.nom) + '</div><span class="small">' + (liste.some(r => r.stagiaire_id === x.id) ? (liste.find(r => r.stagiaire_id === x.id).mode === 'papier' ? 'papier' : 'téléphone') : '<span class="muted">pas encore</span>') + '</span></li>').join('') + '</ul></details>' : '') +
       '<button id="rRet">Retour aux bilans</button>');
-    p.querySelector('#rRet').onclick = () => fermerPlein();
+    p.querySelector('#rRet').onclick = () => { if (retour) retour(); else fermerPlein(); };
     void nomR;
+  }
+
+  // ---------- évaluations à froid (lot B) : un seul écran ; actions réservées à Alexandre, lecture des nombres pour les formateurs.
+  // Aucune adresse de stagiaire n'est jamais affichée : la base ne renvoie que des nombres.
+  const NIVEAU = { rouge: ['✗', 'r'], orange: ['!', 'o'], vert: ['✓', 'v'] };
+  const REMISE = { delivre: 'délivré', rejete: 'rejeté', en_cours: 'en cours', inconnu: 'inconnu' };
+  const EVT = { froid_prepare: 'Préparation', froid_adresses_papier: 'Adresses du papier saisies', froid_feuille_detruite: 'Feuille papier détruite',
+    froid_effacement_demande: 'Adresse effacée sur demande', froid_test: 'Test demandé', froid_test_envoye: 'Test envoyé au Gmail', froid_test_echec: 'Échec du test',
+    ouverture: 'Questionnaires ouverts', froid_envoi: 'Envoi', froid_envoi_erreur: 'Erreur pendant l’envoi', froid_recap_envoye: 'Récapitulatif envoyé au Gmail',
+    froid_recap_echec: 'Échec du récapitulatif', froid_remise: 'Remise relevée', froid_journal_brevo_purge: 'Journal Brevo supprimé',
+    froid_ids_brevo_effaces: 'Identifiants Brevo effacés', froid_effacement_6_mois: 'Adresses effacées (6 mois)', froid_pdf_produit: 'Bilan à froid produit',
+    froid_pdf_mail_envoye: 'Bilan à froid envoyé au Gmail', froid_pdf_mail_echec: 'Bilan à froid non envoyé par mail', froid_pdf_echec: 'Échec du bilan à froid' };
+  // détail du journal : seulement les nombres et les mots courts (jamais d'empreinte, de chemin ni d'identifiant)
+  function detailJ(o) {
+    const plat = Object.assign({}, o || {}, (o && o.stagiaires) || {});
+    return Object.entries(plat).filter(([k, v]) => ['number', 'boolean'].includes(typeof v) || (typeof v === 'string' && v.length <= 40 && !/sha|chemin|brevo|modele|objet|destinataire|cci|expediteur|fichier/.test(k)))
+      .map(([k, v]) => k.replace(/_/g, ' ') + ' : ' + (v === true ? 'oui' : v === false ? 'non' : v)).join(', ');
+  }
+  function ecranFroid() {
+    const F = d.froid, s = d.session, admin = d.moi.role === 'admin';
+    if (!F) { toast('À froid indisponible pour le moment.'); return; }
+    const FS = camp('froid_stagiaire'), FR = camp('froid_responsable'), docs = F.documents || [];
+    const ouvertes = [FS, FR].filter(c => c && c.etat === 'ouverte'), fermees = !!(FS && FR && FS.etat === 'fermee' && FR.etat === 'fermee');
+    const env = F.envoi || {}, ap = F.apercu || {}, limitePassee = !!F.date_limite && F.aujourdhui >= F.date_limite;
+    const typeCourt = c => c.type === 'froid_stagiaire' ? 'stagiaire' : 'établissement';
+    let h = '<div class="eyebrow">' + esc(s.intitule) + ' · ' + esc(s.dates) + '</div><h2>Évaluations à froid</h2>' +
+      (F.fictive ? '<p><span class="chip">Session fictive</span> <span class="muted small">seules des adresses de 2A Formation sont permises</span></p>' : '');
+    // état
+    h += '<div class="panel"><div class="small">Envoi possible à partir du <b>' + frDate(F.j90) + '</b> · réponses jusqu’au <b>' + frDate(F.date_limite || F.limite_prevue) + '</b>' + (F.date_limite ? '' : ' (date prévue)') +
+      ' · adresses effacées d’office le ' + frDate(F.effacement_auto) + '</div>' +
+      '<div class="small" style="margin-top:6px"><b>' + F.adresses + '</b> adresse' + (F.adresses > 1 ? 's' : '') + ' en attente d’envoi' + (F.feuille_detruite_le ? ' · feuille papier détruite le ' + frDate(F.feuille_detruite_le) : '') + '</div>' +
+      (env.envoye_le ? '<div class="small" style="margin-top:6px">Envoyé le ' + esc(env.envoye_le) + (env.envoye_par ? ' par ' + esc(env.envoye_par) : '') + (env.m3_envoye_le ? ' · établissement le ' + esc(env.m3_envoye_le) : ' · établissement pas encore joint') + ' · ' + env.essais + ' essai(s)</div>' : '') +
+      (env.en_cours ? '<div class="note small" style="margin-top:6px">Un envoi est en cours : attendez la fin avant toute autre action.</div>' : '') +
+      ([FS, FR].some(Boolean) ? '<div class="small" style="margin-top:6px">' + [FS, FR].filter(Boolean).map(c => esc(NOM_TYPE[c.type]) + ' : ' + c.nb + ' réponse' + (c.nb > 1 ? 's' : '') + (c.nb_papier ? ' (dont ' + c.nb_papier + ' du papier)' : '') + ' ' + chip(c.etat)).join(' · ') + '</div>' : '') + '</div>';
+    if (admin && !F.preparee) h += '<div class="panel"><h3>Préparer</h3><p class="muted small">Crée les deux questionnaires (encore fermés), leurs liens communs à la session et la date limite. Rien n’est envoyé.</p><button class="primary" id="fPrep">Préparer l’à froid</button></div>';
+    if (admin) {
+      h += '<div class="panel"><h3>Adresses des stagiaires</h3>' +
+        '<p class="muted small">Recopiez la feuille papier « Questionnaire à froid », une adresse par ligne. Les adresses ne s’affichent jamais ; une adresse invalide arrête toute la saisie.</p>' +
+        '<textarea id="fAdr" rows="4" autocomplete="off" spellcheck="false" placeholder="une adresse par ligne"></textarea><div class="row"><button id="fAdrOk">Enregistrer les adresses</button></div>' +
+        (F.preparee && !F.feuille_detruite_le ? '<div class="row" style="margin-top:10px;align-items:center"><label class="small">Feuille papier détruite le <input type="date" id="fDetr" min="' + esc(s.dernier_jour) + '" max="' + esc(F.aujourdhui) + '"></label><button id="fDetrOk">Noter</button></div>' : '') +
+        '<div class="row" style="margin-top:10px;align-items:center"><input type="email" id="fEff" placeholder="adresse à effacer (demande d’une personne)" autocomplete="off" style="flex:1;min-width:200px"><button id="fEffOk">Effacer cette adresse</button></div></div>';
+      if (F.preparee) {
+        h += '<div class="panel"><h3>Contrôles avant l’envoi</h3>' + (F.controles || []).map(c => { const n = NIVEAU[c.niveau] || ['?', '']; return '<div class="bil-ctl"><span class="' + n[1] + '">' + n[0] + '</span><div><b>' + esc(c.libelle) + '</b><div class="muted small">' + esc(c.detail || '') + '</div></div></div>'; }).join('') + '</div>';
+        if (ap.stagiaire) h += '<details class="panel"><summary><b>Aperçu du mail aux stagiaires</b> <span class="muted small">un mail par adresse, aucune copie</span></summary><p class="small"><b>Objet :</b> ' + esc(ap.stagiaire.objet) + '</p><div class="bil-txt">' + esc(ap.stagiaire.texte) + '</div></details>';
+        if (ap.etablissement) h += '<details class="panel"><summary><b>Aperçu du mail à l’établissement</b> <span class="muted small">à ' + esc(ap.etablissement.destinataire || '–') + ', copie cachée au Gmail</span></summary><p class="small"><b>Objet :</b> ' + esc(ap.etablissement.objet) + '</p><div class="bil-txt">' + esc(ap.etablissement.texte) + '</div></details>';
+        if (F.liens) h += '<p class="small muted">Questionnaires : <a href="' + esc(F.liens.stagiaires) + '" target="_blank" rel="noopener">stagiaires</a> · <a href="' + esc(F.liens.responsable) + '" target="_blank" rel="noopener">établissement</a> (liens communs à la session)</p>';
+        const peut = !F.rouges && !env.en_cours;
+        h += '<div class="panel"><h3>Envoyer</h3><div class="row" style="align-items:center"><button id="fTest">M’envoyer un test</button><span class="muted small">les deux mails, marqués [TEST], à 2aa.formation@gmail.com seulement</span></div>' +
+          '<p class="small" style="margin-top:10px"><b>Documents contrôlés par</b> <label><input type="radio" name="fPar" value="Antoine"> Antoine</label> <label><input type="radio" name="fPar" value="Alexandre"> Alexandre</label></p>' +
+          '<div class="row" style="align-items:center"><button class="primary" id="fEnv"' + (peut ? '' : ' disabled') + '>' + (env.envoye_le ? 'Nouvel essai' : 'Envoyer') + '</button>' +
+          (peut ? '' : '<span class="muted small">' + (env.en_cours ? 'Envoi en cours.' : 'Bloqué : ' + F.rouges + ' contrôle(s) rouge(s).') + '</span>') + '</div><div id="fConf" hidden></div><div id="fRes"></div></div>';
+        if (env.envoye_le) h += '<div class="panel"><h3>Remise des mails</h3><p class="muted small">À relever dans les 24 h qui suivent l’envoi : le journal Brevo des mails aux stagiaires est ensuite supprimé.</p><div class="row"><button id="fRem">Vérifier la remise</button></div><div id="fRemRes" class="small" style="margin-top:6px"></div></div>';
+      }
+    }
+    // réponses et clôture
+    if (FS || FR) {
+      const bts = [FS, FR].filter(Boolean).map(c => (admin ? '<button data-fpap="' + c.id + '">Saisir un questionnaire papier (' + typeCourt(c) + ')</button>' : '') +
+        (c.etat === 'fermee' && c.nb ? '<button data-fvoir="' + c.id + '">Résultats (' + typeCourt(c) + ')</button>' : '')).join('');
+      h += '<div class="panel"><h3>Réponses</h3>' + (bts ? '<div class="row">' + bts + '</div>' : '<p class="muted small">Les résultats s’affichent une fois les questionnaires fermés.</p>') +
+        (admin && ouvertes.length ? '<div class="row" style="margin-top:10px;align-items:center"><button id="fFerm">Fermer les questionnaires à froid</button>' + (limitePassee ? '' : '<span class="muted small">date limite le ' + frDate(F.date_limite) + '</span>') + '</div>' : '') + '</div>';
+    }
+    // bilan à froid
+    h += '<div class="panel"><h3>Bilan à froid (PDF)</h3><p class="muted small">' + (fermees ? 'Taux de réponse, objectifs au début, en fin de formation et à froid, appréciations, points à reporter au plan d’amélioration. Envoyé au Gmail ; Claude vérifie l’empreinte et le range dans 7_Evaluations.' : 'Disponible une fois les deux questionnaires à froid fermés.') + '</p>' +
+      ((admin && fermees) || docs.length ? '<div class="row">' + (admin && fermees ? '<button class="' + (docs.length ? '' : 'primary') + '" id="fPdf">' + (docs.length ? 'Produire une nouvelle version' : 'Produire le bilan à froid') + '</button>' : '') +
+        docs.map(o => '<button data-flire="' + o.id + '">Ouvrir la version ' + o.version + ' du ' + esc(o.le) + '</button>').join('') + '</div>' : '') + '</div>';
+    if ((F.journal || []).length) h += '<details class="panel"><summary><b>Journal</b> <span class="muted small">nombres seulement, aucune adresse</span></summary><ul class="list small" style="margin-top:6px">' +
+      F.journal.slice().reverse().map(j => '<li><div><b>' + esc(EVT[j.evenement] || j.evenement) + '</b> <span class="muted">' + esc(j.le) + ' · ' + esc(j.auteur) + '</span>' + (detailJ(j.detail) ? '<div class="muted">' + esc(detailJ(j.detail)) + '</div>' : '') + '</div></li>').join('') + '</ul></details>';
+    h += '<button id="fRet">Retour aux bilans</button>';
+    const p = ouvrirPlein(h);
+    const on = (id, f) => { const b = p.querySelector('#' + id); if (b) b.onclick = () => f(b); };
+    const recharger = async () => { await charger(); ecranFroid(); };
+    on('fRet', () => { fermerPlein(); rendre(); });
+    on('fPrep', b => action(b, async () => { const r = await rpc('bil_froid_preparer', { p_session: s.id }); toast(r.deja ? 'Déjà préparé' : 'À froid préparé : réponses jusqu’au ' + frDate(r.date_limite)); await recharger(); }));
+    on('fAdrOk', b => {
+      const t = p.querySelector('#fAdr').value; if (!t.trim()) { toast('Aucune adresse saisie.'); return; }
+      action(b, async () => { const r = await rpc('bil_froid_saisir_papier', { p_session: s.id, p_adresses: t }); toast(r.ajoutees + ' adresse(s) ajoutée(s)' + (r.deja_presentes ? ', ' + r.deja_presentes + ' déjà présente(s)' : '') + ' · ' + r.total + ' en attente'); await recharger(); });
+    });
+    on('fDetrOk', async b => {
+      const v = p.querySelector('#fDetr').value; if (!v) { toast('Indiquez la date de destruction.'); return; }
+      if (!await confirmer('Noter que la feuille papier des adresses a été détruite le <b>' + esc(frDate(v)) + '</b> ? Cette date ne se modifie plus.', 'Noter')) return;
+      action(b, async () => { await rpc('bil_froid_feuille_detruite', { p_session: s.id, p_le: v }); toast('Destruction notée'); await recharger(); });
+    });
+    on('fEffOk', b => {
+      const v = p.querySelector('#fEff').value.trim(); if (!v) { toast('Saisissez l’adresse à effacer.'); return; }
+      action(b, async () => { const r = await rpc('bil_froid_effacer_adresse', { p_email: v }); p.querySelector('#fEff').value = '';
+        await recharger(); informer(r.trouvee ? 'Adresse trouvée et effacée (dans toutes les sessions).' : 'Adresse introuvable : jamais saisie ou déjà effacée.'); });
+    });
+    on('fTest', b => action(b, async () => { toast('Envoi du test…'); await fn('envois-brevo', { action: 'froid_test', session_id: s.id }); toast('Test envoyé à 2aa.formation@gmail.com'); await recharger(); }));
+    on('fEnv', b => {
+      const par = (p.querySelector('input[name=fPar]:checked') || {}).value;
+      if (!par) { toast('Cochez « Documents contrôlés par » : Antoine ou Alexandre.'); return; }
+      const box = p.querySelector('#fConf'); box.hidden = false;
+      box.innerHTML = '<div class="note" style="margin-top:10px"><b>Envoyer maintenant ?</b><div class="small" style="margin-top:4px">' +
+        (F.adresses ? F.adresses + ' mail(s) aux stagiaires, un par adresse, sans aucune copie ; chaque adresse acceptée par Brevo est effacée aussitôt.' : 'Aucun mail aux stagiaires (aucune adresse).') +
+        (env.m3_envoye_le ? ' Le mail à l’établissement est déjà parti : il ne repart pas.' : ap.etablissement ? ' Mail à l’établissement : ' + esc(ap.etablissement.destinataire || '–') + ', copie cachée au Gmail.' : '') +
+        ' Les deux questionnaires s’ouvrent aux réponses. Documents contrôlés par ' + esc(par) + '.</div><div class="row" style="margin-top:8px"><button class="primary" id="fOui">Confirmer l’envoi</button><button id="fNon">Annuler</button></div></div>';
+      p.querySelector('#fNon').onclick = () => { box.hidden = true; box.innerHTML = ''; };
+      p.querySelector('#fOui').onclick = e => action(e.target, async () => {
+        b.disabled = true; p.querySelector('#fNon').disabled = true;
+        box.insertAdjacentHTML('beforeend', '<p class="small"><b>Envoi en cours…</b> Ne fermez pas cette page (jusqu’à 2 minutes).</p>');
+        let r;
+        try { r = await fn('envois-brevo', { action: 'froid_envoyer', session_id: s.id, controle_par: par }); }
+        catch (x) { await recharger(); throw x; }
+        await recharger();
+        const res = plein && plein.querySelector('#fRes');
+        if (res) res.innerHTML = '<div class="note" style="margin-top:10px"><b>Envoi terminé.</b> Stagiaires : ' + r.envoyes + ' mail(s) envoyé(s), ' + r.effacees + ' adresse(s) effacée(s), ' + r.echecs + ' échec(s), ' + r.restantes + ' adresse(s) restante(s). Établissement : ' + esc(r.etablissement) + '. Récapitulatif au Gmail : ' + (r.recap ? 'envoyé' : 'non envoyé') + '.' +
+          (r.alerte ? '<div style="margin-top:6px;color:var(--bad);font-weight:700">' + esc(r.alerte) + '</div>' : '') + '</div>';
+      });
+    });
+    on('fRem', b => action(b, async () => {
+      const r = await fn('envois-brevo', { action: 'froid_remise', session_id: s.id }); await recharger();
+      const x = plein && plein.querySelector('#fRemRes');
+      if (x) x.textContent = 'Stagiaires : ' + r.delivre + ' délivré(s), ' + r.rejete + ' rejeté(s), ' + r.en_cours + ' en cours · établissement : ' + (REMISE[r.etablissement] || r.etablissement) + '.';
+    }));
+    on('fFerm', async b => {
+      if (!await confirmer('Fermer ' + ouvertes.map(c => '« ' + esc(NOM_TYPE[c.type]) + ' »').join(' et ') + ' ?' + (limitePassee ? '' : '<br><br><b>Attention :</b> la date limite annoncée (' + esc(frDate(F.date_limite)) + ') n’est pas passée.') + '<br><br>Plus aucune réponse en ligne ; la saisie du papier reste possible.', 'Fermer')) return;
+      action(b, async () => { let n = 0; for (const c of ouvertes) { const r = await rpc('bil_fermer', { p_campagne: c.id }); n += (r && r.reponses) || 0; } toast('Questionnaires à froid fermés : ' + n + ' réponse(s)'); await recharger(); });
+    });
+    on('fPdf', b => action(b, async () => { toast('Production du bilan à froid…'); const r = await fn('bilans-pdf', { action: 'froid', session_id: s.id }); toast('Bilan à froid version ' + r.version + ' produit' + (r.mail ? ' et envoyé au Gmail' : '')); await recharger(); }));
+    p.querySelectorAll('[data-flire]').forEach(x => x.onclick = () => action(x, async () => { const r = await fn('bilans-pdf', { action: 'lien', session_id: s.id, document_id: x.dataset.flire }); window.open(r.url, '_blank', 'noopener'); }));
+    p.querySelectorAll('[data-fpap]').forEach(x => x.onclick = () => ecranPapier(x.dataset.fpap, ecranFroid));
+    p.querySelectorAll('[data-fvoir]').forEach(x => x.onclick = () => ecranResultats(x.dataset.fvoir, ecranFroid));
   }
 
   function monter(el, c) { if (!sb || !el) return; if (code !== c) d = null; zone = el; code = c; afficher(); }
